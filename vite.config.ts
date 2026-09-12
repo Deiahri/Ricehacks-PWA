@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -5,8 +6,11 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   // Relative base so the build works under a GitHub Pages sub-path.
   base: './',
+  // MapLibre's worker is an ES module (spawned with type: 'module') that imports a shared chunk.
+  worker: { format: 'es' },
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png'],
@@ -18,8 +22,8 @@ export default defineConfig({
         orientation: 'portrait',
         start_url: './',
         scope: './',
-        theme_color: '#000000',
-        background_color: '#f6f7f9',
+        theme_color: '#ffffff',
+        background_color: '#e8edf5',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -27,8 +31,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // App shell is precached at install. The ~25 MB of wasm + models is cached on first use instead.
-        globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
+        // App shell (incl. self-hosted fonts) is precached at install. The ~25 MB of wasm + models is cached on first use instead.
+        globPatterns: ['**/*.{js,css,html,png,svg,woff2,webmanifest}'],
         globIgnores: ['wasm/**', 'models/**'],
         runtimeCaching: [
           {

@@ -1,465 +1,307 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react'
+import MapScreen from './components/MapScreen'
+import CalendarScreen from './components/CalendarScreen'
+import LeaderboardScreen from './components/LeaderboardScreen'
+import NotificationsScreen from './components/NotificationsScreen'
+import ProfileScreen from './components/ProfileScreen'
+import BattleFlow from './components/BattleFlow'
+import InstallHint from './components/InstallHint'
 
-import { getLandmarker, type Model } from './camera/landmarker';
-import { getCameraStream, type Facing } from './camera/stream';
-import type { Landmark, PoseEventPayload } from './camera/types';
-import { usePoseCamera } from './camera/usePoseCamera';
-import { EXERCISES, type ExerciseName, type RepResult } from './logic/exercises';
-import { SKELETON, VIS_THRESHOLD, poseFromLandmarks } from './logic/pose';
-import { cameraErrorMessage, isIOS, isStandalone, storage, useElementSize, useWakeLock } from './platform';
+export type Tab = 'calendar' | 'leaderboard' | 'map' | 'notifications' | 'profile'
+export type BattleStep = 'pre-anim' | 'goals' | 'recording' | 'result'
 
-type Settings = { exercise: ExerciseName; model: Model; facing: Facing };
+export interface Appearance {
+  skin: string
+  skinOutline: string
+  eye: string
+  shirt: string
+}
 
-type SessionSummary = {
-  exercise: ExerciseName;
-  model: string;
-  delegate: string;
-  cameraFacing: Facing;
-  standalone: boolean;
-  userAgent: string;
-  repsCounted: number;
-  partialReps: number;
-  avgScore: number;
-  subscoreKeys: string[];
-  reps: RepResult[];
-  stats: {
-    frames: number;
-    seconds: number;
-    avgFps: number;
-    avgInferenceMs: number;
-    avgPreprocessMs: number;
-    poseDetectedPct: number;
-  };
-};
+// Equippable gear — hat sits on the head, shield in the defence hand,
+// weapon (wand or gauntlet) in the handheld slot.
+export interface Equipment {
+  hat?: boolean
+  shield?: boolean
+  weapon?: 'wand' | 'gauntlet'
+}
 
-const PLACEMENT: Record<ExerciseName, string> = {
-  squat: 'Prop the phone up, stand side-on (or at 45°), whole body in frame.',
-  pushup: 'Phone at floor height, side-on, head to ankles in frame.',
-};
+// Randomly gear up an NPC with up to 2 distinct-slot items.
+function randomEquipment(): Equipment {
+  const slots: (keyof Equipment)[] = ['hat', 'shield', 'weapon']
+  const shuffled = [...slots].sort(() => Math.random() - 0.5)
+  const count = Math.floor(Math.random() * 3) // 0, 1 or 2 items
+  const eq: Equipment = {}
+  for (const slot of shuffled.slice(0, count)) {
+    if (slot === 'weapon') eq.weapon = Math.random() < 0.5 ? 'wand' : 'gauntlet'
+    else eq[slot] = true
+  }
+  return eq
+}
 
-const scoreColor = (s: number) => (s >= 80 ? '#3ddc84' : s >= 60 ? '#ffc53d' : '#ff5c5c');
-const round1 = (x: number) => Math.round(x * 10) / 10;
+export interface Player {
+  id: number
+  name: string
+  level: number
+  power: number
+  speed: number
+  evasion: number
+  bp: number
+  wins: number
+  losses: number
+  x: number
+  y: number
+  appearance: Appearance
+  equipment: Equipment
+}
+
+// A saturated brand accent used for UI chrome now that archetypes are gone.
+// Per-player differentiation comes from each avatar's shirt colour.
+export const ACCENT = '#4a90e2'
+export const ACCENT_BG = '#eff5ff'
+
+export const ME: Player = {
+  id: 0,
+  name: 'Alex Chen',
+  level: 9,
+  power: 68,
+  speed: 74,
+  evasion: 82,
+  bp: 285,
+  wins: 14,
+  losses: 6,
+  x: 50,
+  y: 65,
+  appearance: { skin: '#f0c68d', skinOutline: '#be8d4b', eye: '#874c24', shirt: '#c3a0e6' },
+  equipment: {}, // MC starts with no gear (can afford the Low Tier Shield)
+}
+
+export const NEARBY_PLAYERS: Player[] = [
+  { id: 1, name: 'Jordan K.', level: 12, power: 78, speed: 85, evasion: 62, bp: 340, wins: 20, losses: 8,  x: 30, y: 40,
+    appearance: { skin: '#d9a066', skinOutline: '#a9743f', eye: '#3e6fa3', shirt: '#e98a8a' }, equipment: randomEquipment() },
+  { id: 2, name: 'Sam R.',    level: 8,  power: 92, speed: 45, evasion: 38, bp: 210, wins: 11, losses: 9,  x: 70, y: 35,
+    appearance: { skin: '#8d5524', skinOutline: '#5e3312', eye: '#2e2a26', shirt: '#7fb0e0' }, equipment: randomEquipment() },
+  { id: 4, name: 'Casey L.', level: 15, power: 65, speed: 70, evasion: 88, bp: 520, wins: 30, losses: 12, x: 60, y: 56,
+    appearance: { skin: '#c68642', skinOutline: '#8c5a2b', eye: '#3e7d4f', shirt: '#b98be0' }, equipment: randomEquipment() },
+]
+
+// ── Dumbbell icon for the map/workout CTA ──
+function DumbbellIcon({ color = '#fff' }: { color?: string }) {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      {/* left plate stack */}
+      <rect x="1" y="9"  width="4" height="10" rx="2" fill={color}/>
+      <rect x="4" y="7"  width="3" height="14" rx="1.5" fill={color}/>
+      {/* bar */}
+      <rect x="7" y="12.5" width="14" height="3" rx="1.5" fill={color}/>
+      {/* right plate stack */}
+      <rect x="21" y="7"  width="3" height="14" rx="1.5" fill={color}/>
+      <rect x="23" y="9"  width="4" height="10" rx="2" fill={color}/>
+    </svg>
+  )
+}
+
+function CalendarIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="4" width="18" height="18" rx="3" stroke={active ? '#58cc02' : '#9aaac4'} strokeWidth="2.2"/>
+      <path d="M3 9h18" stroke={active ? '#58cc02' : '#9aaac4'} strokeWidth="2.2"/>
+      <path d="M8 2v4M16 2v4" stroke={active ? '#58cc02' : '#9aaac4'} strokeWidth="2.2" strokeLinecap="round"/>
+      <rect x="7" y="13" width="3" height="3" rx="0.5" fill={active ? '#58cc02' : '#9aaac4'}/>
+      <rect x="14" y="13" width="3" height="3" rx="0.5" fill={active ? '#58cc02' : '#9aaac4'}/>
+    </svg>
+  )
+}
+
+function MapNavIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+        fill={active ? '#fff' : '#9aaac4'}/>
+      <circle cx="12" cy="9" r="2.5" fill={active ? '#ff4b4b' : '#e8edf5'}/>
+    </svg>
+  )
+}
+
+function ProfileIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8" r="4" stroke={active ? '#58cc02' : '#9aaac4'} strokeWidth="2.2"/>
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={active ? '#58cc02' : '#9aaac4'} strokeWidth="2.2" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function LeaderboardIcon({ active }: { active: boolean }) {
+  const c = active ? '#58cc02' : '#9aaac4'
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="12" width="4" height="9" rx="1.5" fill={c}/>
+      <rect x="10" y="7" width="4" height="14" rx="1.5" fill={c}/>
+      <rect x="17" y="4" width="4" height="17" rx="1.5" fill={c}/>
+    </svg>
+  )
+}
+
+function BellIcon({ active, badge }: { active: boolean; badge?: number }) {
+  const c = active ? '#58cc02' : '#9aaac4'
+  return (
+    <div className="relative">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+        <path d="M18 8a6 6 0 10-12 0c0 4-2 6-2 6h16s-2-2-2-6z" stroke={c} strokeWidth="2.2" strokeLinejoin="round"/>
+        <path d="M13.73 21a2 2 0 01-3.46 0" stroke={c} strokeWidth="2.2" strokeLinecap="round"/>
+      </svg>
+      {badge != null && badge > 0 && (
+        <div
+          className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center font-game font-black"
+          style={{ background: '#ff4b4b', fontSize: 9, color: '#fff', lineHeight: 1 }}
+        >
+          {badge}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BottomNav({
+  tab,
+  setTab,
+  onWorkoutTap,
+  notificationCount,
+}: {
+  tab: Tab
+  setTab: (t: Tab) => void
+  onWorkoutTap: () => void
+  notificationCount: number
+}) {
+  const isMapTab = tab === 'map'
+
+  const navBtn = (target: Tab, icon: React.ReactNode, label: string) => (
+    <button
+      onClick={() => setTab(target)}
+      className="flex flex-col items-center gap-0.5 pb-1 transition-transform active:scale-90 flex-1"
+    >
+      {icon}
+      <span className="text-[9px] font-game font-bold" style={{ color: tab === target ? '#58cc02' : '#9aaac4' }}>
+        {label}
+      </span>
+    </button>
+  )
+
+  return (
+    <div
+      className="absolute bottom-0 left-0 right-0 flex items-end justify-around px-2"
+      style={{
+        // Grow by the iOS home-indicator inset so the buttons clear it.
+        height: 'calc(80px + env(safe-area-inset-bottom))',
+        paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
+        background: '#ffffff',
+        borderTop: '2.5px solid #c8d0e0',
+      }}
+    >
+      {navBtn('calendar', <CalendarIcon active={tab === 'calendar'}/>, 'Progress')}
+      {navBtn('leaderboard', <LeaderboardIcon active={tab === 'leaderboard'}/>, 'Ranks')}
+
+      {/* Centre: Map / Workout CTA */}
+      <button
+        onClick={() => {
+          if (isMapTab) {
+            onWorkoutTap()
+          } else {
+            setTab('map')
+          }
+        }}
+        className="flex flex-col items-center gap-0.5 transition-transform active:scale-90 flex-1"
+        style={{ marginTop: isMapTab ? -24 : -20 }}
+      >
+        <div
+          style={{
+            width:  isMapTab ? 64 : 52,
+            height: isMapTab ? 64 : 52,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: isMapTab
+              ? 'linear-gradient(145deg, #ff6b6b, #ff4b4b)'
+              : '#f5f7fb',
+            border: isMapTab ? '3px solid #ff9090' : '2.5px solid #c8d0e0',
+            boxShadow: isMapTab
+              ? '0 6px 24px rgba(255,75,75,0.45)'
+              : '0 2px 8px rgba(0,0,0,0.08)',
+            transition: 'all 0.25s cubic-bezier(.22,1,.36,1)',
+          }}
+        >
+          {isMapTab
+            ? <DumbbellIcon color="#fff"/>
+            : <MapNavIcon active={false}/>
+          }
+        </div>
+        <span
+          className="text-[9px] font-game font-bold"
+          style={{ color: isMapTab ? '#ff4b4b' : '#9aaac4' }}
+        >
+          {isMapTab ? 'Workout' : 'Map'}
+        </span>
+      </button>
+
+      {navBtn('notifications', <BellIcon active={tab === 'notifications'} badge={notificationCount}/>, 'Alerts')}
+      {navBtn('profile', <ProfileIcon active={tab === 'profile'}/>, 'Profile')}
+    </div>
+  )
+}
 
 export default function App() {
-  const [settings, setSettings] = useState<Settings>({ exercise: 'squat', model: 'full', facing: 'front' });
-  const [screen, setScreen] = useState<'home' | 'camera' | 'summary'>('home');
-  const [summary, setSummary] = useState<SessionSummary | null>(null);
-  const [error, setError] = useState('');
-  const [cameraBlocked, setCameraBlocked] = useState(false);
-  const [starting, setStarting] = useState(false);
+  const [tab, setTab] = useState<Tab>('map')
+  const [battleStep, setBattleStep] = useState<BattleStep | null>(null)
+  const [opponent, setOpponent] = useState<Player | null>(null)
+  const [isSoloWorkout, setIsSoloWorkout] = useState(false)
 
-  // Start downloading the model while the user is still on the home screen.
-  useEffect(() => {
-    getLandmarker(settings.model).catch(() => {});
-  }, [settings.model]);
-
-  // Screens are plain React state: no router, no URL/hash changes (those re-prompt for the camera on iOS).
-  const start = async (exercise: ExerciseName) => {
-    setError('');
-    setStarting(true);
-    try {
-      await getCameraStream(settings.facing);
-    } catch (e) {
-      setError(cameraErrorMessage(e));
-      setCameraBlocked(isStandalone());
-      return;
-    } finally {
-      setStarting(false);
-    }
-    setCameraBlocked(false);
-    setSettings((s) => ({ ...s, exercise }));
-    setScreen('camera');
-  };
-
-  if (screen === 'camera') {
-    return (
-      <CameraScreen
-        settings={settings}
-        onEnd={(s) => {
-          setSummary(s);
-          setSettings((prev) => ({ ...prev, facing: s.cameraFacing }));
-          setScreen('summary');
-        }}
-      />
-    );
+  const startBattle = (player: Player) => {
+    setOpponent(player)
+    setIsSoloWorkout(false)
+    setBattleStep('pre-anim')
   }
-  if (screen === 'summary' && summary) {
-    return <SummaryScreen summary={summary} onAgain={() => setScreen('camera')} onHome={() => setScreen('home')} />;
+
+  const startSoloWorkout = () => {
+    setIsSoloWorkout(true)
+    setOpponent(null)
+    setBattleStep('recording')
   }
+
+  const exitBattle = () => {
+    setBattleStep(null)
+    setOpponent(null)
+    setIsSoloWorkout(false)
+  }
+
   return (
-    <HomeScreen
-      settings={settings}
-      onChange={(patch) => setSettings((s) => ({ ...s, ...patch }))}
-      onStart={start}
-      starting={starting}
-      error={error}
-      cameraBlocked={cameraBlocked}
-    />
-  );
-}
-
-// --- Home ---------------------------------------------------------------------
-
-function HomeScreen(props: {
-  settings: Settings;
-  onChange: (patch: Partial<Settings>) => void;
-  onStart: (exercise: ExerciseName) => void;
-  starting: boolean;
-  error: string;
-  cameraBlocked: boolean;
-}) {
-  const { settings, onChange, onStart, starting, error, cameraBlocked } = props;
-  return (
-    <main className="page home">
-      <InstallHint />
-      <h1 className="title">CV Exercise</h1>
-      <p className="subtitle">Pick an exercise. Reps are counted and each rep gets a form score. Video never leaves the phone.</p>
-
-      {(['squat', 'pushup'] as ExerciseName[]).map((name) => (
-        <button key={name} className="card" disabled={starting} onClick={() => onStart(name)}>
-          <span className="card-title">{name === 'squat' ? 'Squat' : 'Push-up'}</span>
-          <span className="card-hint">{PLACEMENT[name]}</span>
-        </button>
-      ))}
-
-      <Segmented
-        label="Model"
-        options={[['full', 'Full (accurate)'], ['lite', 'Lite (fast)']]}
-        value={settings.model}
-        onChange={(model) => onChange({ model: model as Model })}
-      />
-      <Segmented
-        label="Camera"
-        options={[['front', 'Front'], ['back', 'Back']]}
-        value={settings.facing}
-        onChange={(facing) => onChange({ facing: facing as Facing })}
-      />
-      {starting ? <p className="muted">Starting camera…</p> : null}
-      {error ? <p className="error">{error}</p> : null}
-      {cameraBlocked ? <OpenInSafariCard /> : null}
-    </main>
-  );
-}
-
-function Segmented(props: { label: string; options: [string, string][]; value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="segment-row">
-      <span className="segment-label">{props.label}</span>
-      <div className="segment" role="radiogroup" aria-label={props.label}>
-        {props.options.map(([value, text]) => (
-          <button
-            key={value}
-            role="radio"
-            aria-checked={props.value === value}
-            className={props.value === value ? 'segment-item active' : 'segment-item'}
-            onClick={() => props.onChange(value)}
-          >
-            {text}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** iOS has no install prompt API, so tell Safari users how to add the app to the home screen. */
-function InstallHint() {
-  const [show, setShow] = useState(() => isIOS() && !isStandalone() && storage.get('installHintDismissed') !== '1');
-  if (!show) return null;
-  return (
-    <div className="banner">
-      <span>
-        Install: tap <b>Share</b> then <b>Add to Home Screen</b>.
-      </span>
-      <button
-        className="banner-close"
-        aria-label="Dismiss"
-        onClick={() => {
-          storage.set('installHintDismissed', '1');
-          setShow(false);
-        }}
+    <div className="flex items-center justify-center min-h-dvh" style={{ background: '#e8edf5' }}>
+      {/* Phone shell: fills the screen on phones, framed 390×844 "phone" on wider screens */}
+      <div
+        className="relative overflow-hidden bg-white w-screen h-dvh min-[501px]:w-[390px] min-[501px]:h-[844px] min-[501px]:rounded-[44px] min-[501px]:shadow-[0_32px_80px_rgba(0,0,0,0.22),0_0_0_2.5px_#c8d0e0]"
       >
-        ×
-      </button>
-    </div>
-  );
-}
+        {battleStep ? (
+          <BattleFlow
+            step={battleStep}
+            setStep={setBattleStep}
+            opponent={opponent}
+            me={ME}
+            isSolo={isSoloWorkout}
+            onExit={exitBattle}
+          />
+        ) : (
+          <>
+            {tab === 'map'           && <MapScreen me={ME} onStartBattle={startBattle}/>}
+            {tab === 'map'           && <InstallHint/>}
+            {tab === 'calendar'      && <CalendarScreen/>}
+            {tab === 'leaderboard'   && <LeaderboardScreen/>}
+            {tab === 'notifications' && <NotificationsScreen/>}
+            {tab === 'profile'       && <ProfileScreen me={ME}/>}
 
-/** Fallback when iOS blocks the camera for the home-screen app: Safari mode works the same. */
-function OpenInSafariCard() {
-  const [copied, setCopied] = useState(false);
-  const url = location.origin + location.pathname;
-  return (
-    <div className="card warn">
-      <span className="card-title">Camera blocked in home-screen mode</span>
-      <span className="card-hint">
-        iOS sometimes blocks the camera for home-screen apps. Open the same page in Safari, where everything works the same way.
-      </span>
-      <div className="row">
-        <a className="button outline" href={url} target="_blank" rel="noreferrer">
-          Open in Safari
-        </a>
-        <button
-          className="button outline"
-          onClick={() => navigator.clipboard.writeText(url).then(() => setCopied(true), () => setCopied(false))}
-        >
-          {copied ? 'Link copied' : 'Copy link'}
-        </button>
+            <BottomNav tab={tab} setTab={setTab} onWorkoutTap={startSoloWorkout} notificationCount={2}/>
+          </>
+        )}
       </div>
     </div>
-  );
-}
-
-// --- Camera -------------------------------------------------------------------
-
-type Frame = {
-  landmarks: Landmark[];
-  imageWidth: number;
-  imageHeight: number;
-  mirrored: boolean;
-};
-
-function CameraScreen({ settings, onEnd }: { settings: Settings; onEnd: (s: SessionSummary) => void }) {
-  useWakeLock();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const size = useElementSize(boxRef);
-  const [facing, setFacing] = useState<Facing>(settings.facing);
-  const [frame, setFrame] = useState<Frame | null>(null);
-  const [perf, setPerf] = useState({ fps: 0, inferenceMs: 0, delegate: '', model: settings.model as string });
-  const [error, setError] = useState('');
-  const [, setTick] = useState(0);
-
-  const exRef = useRef(EXERCISES[settings.exercise]());
-  const stats = useRef({ frames: 0, detected: 0, inferSum: 0, preSum: 0, fps: 0, last: 0, begin: 0 });
-  const ex = exRef.current;
-
-  const onPose = useCallback((p: PoseEventPayload) => {
-    const s = stats.current;
-    const now = performance.now();
-    if (s.begin === 0) s.begin = now;
-    if (s.last) {
-      const dt = (now - s.last) / 1000;
-      if (dt > 0) s.fps = s.fps === 0 ? 1 / dt : 0.9 * s.fps + 0.1 / dt;
-    }
-    s.last = now;
-    s.frames += 1;
-    s.detected += p.landmarks.length ? 1 : 0;
-    s.inferSum += p.inferenceMs;
-    s.preSum += p.preprocessMs;
-
-    const pose = poseFromLandmarks(p.landmarks, p.imageWidth, p.imageHeight);
-    const rep = exRef.current.update(pose, p.timestampMs / 1000);
-    if (rep) console.log(`Rep ${rep.number}: ${rep.score}%  ${rep.cues.join(', ')}`);
-
-    setFrame({ landmarks: p.landmarks, imageWidth: p.imageWidth, imageHeight: p.imageHeight, mirrored: p.mirrored });
-    setPerf({ fps: s.fps, inferenceMs: p.inferenceMs, delegate: p.delegate, model: p.model });
-  }, []);
-
-  const onError = useCallback((e: unknown) => {
-    console.error(e);
-    setError(cameraErrorMessage(e));
-  }, []);
-
-  const phase = usePoseCamera(videoRef, { model: settings.model, facing, onPose, onError });
-
-  const end = () => {
-    const s = stats.current;
-    const e = exRef.current;
-    const seconds = s.begin ? (performance.now() - s.begin) / 1000 : 0;
-    const summary: SessionSummary = {
-      exercise: settings.exercise,
-      model: perf.model,
-      delegate: perf.delegate,
-      cameraFacing: facing,
-      standalone: isStandalone(),
-      userAgent: navigator.userAgent,
-      repsCounted: e.reps.length,
-      partialReps: e.partialReps,
-      avgScore: round1(e.avgScore),
-      subscoreKeys: Object.keys(e.weights),
-      reps: e.reps,
-      stats: {
-        frames: s.frames,
-        seconds: round1(seconds),
-        avgFps: seconds ? round1(s.frames / seconds) : 0,
-        avgInferenceMs: round1(s.inferSum / Math.max(s.frames, 1)),
-        avgPreprocessMs: round1(s.preSum / Math.max(s.frames, 1)),
-        poseDetectedPct: round1((100 * s.detected) / Math.max(s.frames, 1)),
-      },
-    };
-    console.log(`SESSION_SUMMARY ${JSON.stringify(summary)}`);
-    onEnd(summary);
-  };
-
-  const reset = () => {
-    exRef.current = EXERCISES[settings.exercise]();
-    stats.current = { frames: 0, detected: 0, inferSum: 0, preSum: 0, fps: 0, last: 0, begin: 0 };
-    setTick((t) => t + 1);
-  };
-
-  const last = ex.reps.at(-1);
-  const loading = phase === 'camera' ? 'Starting camera…' : phase === 'model' ? 'Loading pose model… (first run downloads ~15 MB)' : '';
-
-  return (
-    <div className="camera" ref={boxRef}>
-      <video ref={videoRef} className={facing === 'front' ? 'video mirrored' : 'video'} playsInline muted autoPlay />
-      {frame && size.width > 0 ? <SkeletonOverlay frame={frame} width={size.width} height={size.height} /> : null}
-
-      <div className="hud">
-        <div className="hud-title">
-          {ex.label.toUpperCase()} <span className="hud-big">{ex.reps.length}</span> reps
-          <span className="hud-dim"> (partial {ex.partialReps})</span>
-        </div>
-        <div className="hud-text">
-          angle {ex.angle !== null ? `${Math.round(ex.angle)}°` : '–'} · {ex.state}
-        </div>
-        {last ? (
-          <div className="hud-text">
-            last <b style={{ color: scoreColor(last.score) }}>{Math.round(last.score)}%</b>
-            {'   '}avg <b style={{ color: scoreColor(ex.avgScore) }}>{Math.round(ex.avgScore)}%</b>
-          </div>
-        ) : null}
-        {last ? <div className="cue">{last.cues.join('  ·  ')}</div> : null}
-        {ex.notice ? <div className="notice">{ex.notice}</div> : null}
-        {error ? <div className="error">{error}</div> : null}
-      </div>
-
-      {loading && !error ? <div className="loading">{loading}</div> : null}
-
-      <div className="bottom">
-        {ex.status && phase === 'running' ? <div className="status">{ex.status}</div> : null}
-        <div className="perf">
-          {perf.fps.toFixed(0)} FPS · {perf.inferenceMs.toFixed(0)} ms · {perf.model}
-          {perf.delegate ? `/${perf.delegate}` : ''}
-        </div>
-        <div className="row">
-          <button className="button" onClick={() => setFacing((f) => (f === 'front' ? 'back' : 'front'))}>
-            Flip
-          </button>
-          <button className="button" onClick={reset}>
-            Reset
-          </button>
-          <button className="button primary" onClick={end}>
-            End session
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Landmarks are normalized to the camera image; the video fills the view with object-fit: cover. */
-function SkeletonOverlay({ frame, width, height }: { frame: Frame; width: number; height: number }) {
-  const { landmarks, imageWidth: w, imageHeight: h, mirrored } = frame;
-  if (landmarks.length === 0 || !w || !h) return null;
-  const scale = Math.max(width / w, height / h);
-  const dx = (width - w * scale) / 2;
-  const dy = (height - h * scale) / 2;
-  const pt = (i: number) => {
-    const x = landmarks[i].x * w * scale + dx;
-    return { x: mirrored ? width - x : x, y: landmarks[i].y * h * scale + dy };
-  };
-  const visible = (i: number) => landmarks[i].visibility >= VIS_THRESHOLD;
-  const joints = [...new Set(SKELETON.flat())];
-
-  return (
-    <svg className="overlay" width={width} height={height}>
-      {SKELETON.filter(([a, b]) => visible(a) && visible(b)).map(([a, b]) => {
-        const p = pt(a), q = pt(b);
-        return <line key={`${a}-${b}`} x1={p.x} y1={p.y} x2={q.x} y2={q.y} stroke="white" strokeWidth={4} strokeLinecap="round" />;
-      })}
-      {joints.map((i) => {
-        const p = pt(i);
-        return <circle key={i} cx={p.x} cy={p.y} r={6} fill={visible(i) ? '#3ddc84' : '#ff5c5c'} />;
-      })}
-    </svg>
-  );
-}
-
-// --- Summary ------------------------------------------------------------------
-
-function SummaryScreen({ summary, onAgain, onHome }: { summary: SessionSummary; onAgain: () => void; onHome: () => void }) {
-  const { stats, subscoreKeys: keys } = summary;
-  const label = summary.exercise === 'squat' ? 'Squat' : 'Push-up';
-  const json = JSON.stringify(summary);
-  const [copied, setCopied] = useState<'' | 'ok' | 'fail'>('');
-  const copy = () => navigator.clipboard.writeText(json).then(() => setCopied('ok'), () => setCopied('fail'));
-
-  return (
-    <main className="page summary">
-      <h1 className="title">{label} session</h1>
-      <div className="stat-row">
-        <Stat label="Reps" value={String(summary.repsCounted)} />
-        <Stat label="Partial" value={String(summary.partialReps)} />
-        <Stat
-          label="Avg form"
-          value={summary.reps.length ? `${Math.round(summary.avgScore)}%` : '–'}
-          color={summary.reps.length ? scoreColor(summary.avgScore) : undefined}
-        />
-      </div>
-
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              {['#', 'score', ...keys, 'secs', 'cues'].map((c) => (
-                <th key={c}>{c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {summary.reps.map((r) => (
-              <tr key={r.number}>
-                <td>{r.number}</td>
-                <td style={{ color: scoreColor(r.score), fontWeight: 700 }}>{r.score.toFixed(0)}%</td>
-                {keys.map((k) => (
-                  <td key={k}>{k in r.subscores ? r.subscores[k].toFixed(0) : '–'}</td>
-                ))}
-                <td>{r.durationS.toFixed(1)}</td>
-                <td className="wide">{r.cues.join(', ')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {summary.reps.length === 0 ? <p className="empty">No reps counted.</p> : null}
-      </div>
-
-      <p className="perf-summary">
-        {stats.avgFps} FPS avg · {stats.avgInferenceMs} ms inference
-        <br />
-        pose found in {stats.poseDetectedPct}% of {stats.frames} frames · {stats.seconds}s
-        <br />
-        model {summary.model} / {summary.delegate} · {summary.cameraFacing} camera · {summary.standalone ? 'home-screen app' : 'browser'}
-      </p>
-
-      <div className="row">
-        <button className="button primary dark" onClick={onAgain}>
-          Go again
-        </button>
-        <button className="button outline" onClick={onHome}>
-          Change exercise
-        </button>
-      </div>
-
-      <details className="json">
-        <summary>Session data (JSON)</summary>
-        <button className="button outline small" onClick={copy}>
-          {copied === 'ok' ? 'Copied' : copied === 'fail' ? 'Copy failed: select the text below' : 'Copy JSON'}
-        </button>
-        <pre>{json}</pre>
-      </details>
-    </main>
-  );
-}
-
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="stat">
-      <span className="stat-value" style={color ? { color } : undefined}>
-        {value}
-      </span>
-      <span className="stat-label">{label}</span>
-    </div>
-  );
+  )
 }

@@ -1,0 +1,146 @@
+@import 'tailwindcss';
+/* Self-hosted variable fonts (bundled + precached, so they work offline) */
+@import '@fontsource-variable/nunito';
+@import '@fontsource-variable/inter';
+
+@theme {
+  --font-game: 'Nunito Variable', sans-serif;
+  --font-body: 'Inter Variable', sans-serif;
+
+  /* Light theme tokens */
+  --color-bg:       #ffffff;
+  --color-surface:  #f5f7fb;
+  --color-surface2: #ebeef6;
+  --color-border:   #c8d0e0;
+  --color-primary:  #58cc02;
+  --color-primary-dark: #3d9100;
+  --color-streak:   #ff9600;
+  --color-bp:       #ffd700;
+  --color-striker:  #ff4b4b;
+  --color-tank:     #4a90e2;
+  --color-warden:   #a855f7;
+  --color-text:     #1a2b4a;
+  --color-muted:    #7a8ba8;
+  --color-red-action: #ff4b4b;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: 'Inter Variable', sans-serif;
+  background: #e8edf5;
+  color: #1a2b4a;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-game { font-family: 'Nunito Variable', sans-serif; }
+
+/* Live map: lift MapLibre's attribution above the bottom nav. */
+.live-map .maplibregl-ctrl-bottom-right { bottom: calc(84px + env(safe-area-inset-bottom)); }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c8d0e0; border-radius: 4px; }
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeSlideDown {
+  from { opacity: 0; transform: translateY(-24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes vsSlideLeft {
+  from { opacity: 0; transform: translateX(-60px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes vsSlideRight {
+  from { opacity: 0; transform: translateX(60px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes vsFlash {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.15); }
+}
+@keyframes flamePulse {
+  0%, 100% { transform: scale(1) rotate(-3deg); }
+  50% { transform: scale(1.12) rotate(3deg); }
+}
+@keyframes mapBobble {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+/* Walking hop with 3px squash/stretch for illusion of movement */
+@keyframes mapHop {
+  0%   { transform: translateY(0)    scaleX(1)    scaleY(1); }
+  18%  { transform: translateY(0)    scaleX(1.05) scaleY(0.94); } /* anticipate — squash down 3px */
+  45%  { transform: translateY(-7px) scaleX(0.95) scaleY(1.06); } /* airborne — stretch up 3px */
+  72%  { transform: translateY(0)    scaleX(1.06) scaleY(0.93); } /* land — squash */
+  100% { transform: translateY(0)    scaleX(1)    scaleY(1); }
+}
+.anim-hop { animation: mapHop 0.55s ease-in-out infinite; transform-origin: bottom center; }
+@keyframes resultBounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  30% { transform: translateY(-18px) scale(1.06); }
+  60% { transform: translateY(-8px) scale(1.02); }
+}
+@keyframes lightning {
+  0% { opacity: 0; transform: scaleY(0); }
+  20% { opacity: 1; transform: scaleY(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: scaleY(1.1); }
+}
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; filter: drop-shadow(0 0 6px #ff4b4b); }
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.88) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes confettiFall {
+  0% { opacity: 0; transform: translateY(-40px) rotate(var(--rot-start, 0deg)); }
+  10% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(var(--fall, 700px)) translateX(var(--drift, 0px)) rotate(var(--rot-end, 360deg)); }
+}
+@keyframes slamIn {
+  0%   { opacity: 0; transform: scale(2.4) translateY(-10px); letter-spacing: 6px; }
+  55%  { opacity: 1; transform: scale(0.9); }
+  72%  { transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); letter-spacing: 0.15em; }
+}
+/* Winner charges in from the left, then lunges to bump the opponent */
+@keyframes winnerCharge {
+  0%   { opacity: 0; transform: translateX(-130px); }
+  32%  { opacity: 1; transform: translateX(0); }
+  50%  { transform: translateX(0) rotate(0deg); }
+  60%  { transform: translateX(16px) rotate(-4deg); }
+  74%  { transform: translateX(0) rotate(0deg); }
+  100% { transform: translateX(0); }
+}
+/* Loser slides in from the right at equal size, then gets knocked down/shrunk */
+@keyframes loserKnocked {
+  0%   { opacity: 0; transform: translateX(130px) scale(1) rotate(0deg); }
+  32%  { opacity: 1; transform: translateX(0) scale(1) rotate(0deg); }
+  55%  { transform: translateX(0) translateY(0) scale(1) rotate(0deg); }
+  70%  { opacity: 0.7; transform: translateX(30px) translateY(18px) scale(0.667) rotate(10deg); }
+  100% { opacity: 0.55; transform: translateX(0) translateY(18px) scale(0.667) rotate(10deg); }
+}
+
+.anim-fade-up    { animation: fadeSlideUp 0.4s ease both; }
+.anim-slide-left { animation: vsSlideLeft 0.5s cubic-bezier(.22,1,.36,1) both; }
+.anim-slide-right { animation: vsSlideRight 0.5s cubic-bezier(.22,1,.36,1) both; }
+.anim-vs-flash   { animation: vsFlash 1.2s ease-in-out infinite; }
+.anim-slam       { animation: slamIn 0.6s cubic-bezier(.22,1.4,.36,1) both; }
+.anim-winner     { animation: winnerCharge 1.5s cubic-bezier(.34,1.3,.5,1) both; transform-origin: bottom center; }
+.anim-loser      { animation: loserKnocked 1.5s cubic-bezier(.5,0,.5,1) both; transform-origin: bottom center; }
+.anim-flame      { animation: flamePulse 2s ease-in-out infinite; }
+.anim-bobble     { animation: mapBobble 2.4s ease-in-out infinite; }
+.anim-bounce     { animation: resultBounce 1s cubic-bezier(.36,.07,.19,.97) both; }
+.anim-skeleton   { animation: skeletonPulse 1.5s ease-in-out infinite; }
+.anim-pop-in     { animation: popIn 0.3s cubic-bezier(.22,1,.36,1) both; }
