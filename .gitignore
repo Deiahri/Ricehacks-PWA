@@ -1,0 +1,6 @@
+node_modules/
+dist/
+dev-dist/
+public/wasm/
+.logic-test/
+*.local
