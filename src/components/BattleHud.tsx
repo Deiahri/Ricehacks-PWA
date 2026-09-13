@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { DuelEvent, DuelView, Loadout } from '../game/types'
+import { repXpLabel, xpForRep } from '../game/xp'
 
 // The HP duel on screen: live bars during a battle, event toasts, and the breakdown on the result / replay screens.
 // Rules live on the server (battle-effects.mjs); these only draw what it sends.
@@ -75,6 +76,23 @@ export function HpDuel({ duel, hpMax, mine, theirs, opponentName }: {
         streak={you?.streak ?? 0} surge={you?.surge ?? false}/>
       <HpBar label={opponentName} hp={opp?.hp ?? hpMax} hpMax={hpMax} dealt={opp?.dealt ?? 0} loadout={opp?.loadout ?? theirs}
         streak={opp?.streak ?? 0} surge={opp?.surge ?? false}/>
+    </div>
+  )
+}
+
+/** "+2 Perfect!" / "+1 Nice rep" for the rep that just counted. Mount with key = rep count; the animation ends invisible. */
+export function RepXpPop({ formScore }: { formScore: number }) {
+  const xp = xpForRep(formScore)
+  return (
+    <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-10" style={{ top: 96 }}>
+      <div
+        className="anim-float-away px-3 py-1 rounded-xl font-game font-black text-base whitespace-nowrap"
+        style={xp === 2
+          ? { background: '#f0fff0', border: '2px solid #9be36a', color: '#3d9100' }
+          : { background: '#ffffffee', border: '2px solid #c8d0e0', color: '#1a2b4a' }}
+      >
+        +{xp} {repXpLabel(formScore)}
+      </div>
     </div>
   )
 }

@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ImportedFlameIcon from '../imports/FlameIcon/index'
 import CharacterSprite from './CharacterSprite'
+import RewardWheelModal from './RewardWheelModal'
 import UnverifiedTag from './UnverifiedTag'
 import type { Player } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
 import { skinColors } from '../config/appearance'
+import { goalPct } from '../game/xp'
 import LiveMap from '../live/LiveMap'
 import { useLive } from '../live/LiveProvider'
 import { sameName, useProfile } from '../live/ProfileProvider'
@@ -198,11 +200,16 @@ function PlayerPopover({ player, onClose, onBattle }: PopoverProps) {
 }
 
 // --- Streak strip HUD ---
-function StreakStrip({ me }: { me: Player }) {
+/** Where the flames sit along the 210 px track, as % of the fill: lit once the week's XP is that far toward the goal. */
+const POSTS = [26, 52, 74]
+
+/** This week's XP toward the goal: the bar fills, the flames light on the way, the star turns gold at the goal. */
+function StreakStrip({ me, celebrate }: { me: Player; celebrate: boolean }) {
+  const { profile } = useProfile()
   if (!me) return null
   const color = ACCENT
-  const progress = 55 // % of workout goal progress toward next level
-  const reached = progress >= 100
+  const progress = goalPct(profile?.weekXp ?? 0, profile?.weeklyGoal)
+  const reached = profile?.weekMet === true || progress >= 100
 
   return (
     <div style={{ transform: 'scale(1.2)', transformOrigin: 'top center' }}>
@@ -248,17 +255,18 @@ function StreakStrip({ me }: { me: Player }) {
           marginLeft: -14,
         }}
       >
-        {/* Yellow filled portion */}
+        {/* Yellow filled portion (a hair of fill even at 0, so the rounded end shows) */}
         <div
           style={{
             position: 'absolute',
             left: -2,
             top: -2,
-            width: `calc(${progress}% + 2px)`,
+            width: `calc(${Math.max(progress, 4)}% + 2px)`,
             height: 'calc(100% + 4px)',
             borderRadius: 16,
-            background: '#ffc300',
+            background: reached ? '#ffd700' : '#ffc300',
             border: '2px solid #ad6404',
+            transition: 'width 900ms cubic-bezier(.2,.8,.2,1)',
           }}
         />
 
@@ -273,8 +281,8 @@ function StreakStrip({ me }: { me: Player }) {
             zIndex: 10,
           }}
         >
-          <div className="anim-flame" style={{ lineHeight: 0 }}>
-            <FlameIcon filled size={38} />
+          <div className={progress >= POSTS[0] ? 'anim-flame' : ''} style={{ lineHeight: 0 }}>
+            <FlameIcon filled={progress >= POSTS[0]} size={38} />
           </div>
         </div>
 
@@ -288,29 +296,38 @@ function StreakStrip({ me }: { me: Player }) {
             zIndex: 10,
           }}
         >
-          <div className="anim-flame" style={{ lineHeight: 0, animationDelay: '0.3s' }}>
-            <FlameIcon filled size={38} />
+          <div className={progress >= POSTS[1] ? 'anim-flame' : ''} style={{ lineHeight: 0, animationDelay: '0.3s' }}>
+            <FlameIcon filled={progress >= POSTS[1]} size={38} />
           </div>
         </div>
 
-        {/* Incomplete circle 3 */}
-        <div
-          style={{
-            position: 'absolute',
-            left: 144,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 22,
-            height: 22,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.7)',
-            border: '2px solid #9cc2ef',
-            zIndex: 10,
-          }}
-        />
+        {/* Post 3: a circle until the week is three-quarters there, then a flame */}
+        {progress >= POSTS[2] ? (
+          <div style={{ position: 'absolute', left: 136, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
+            <div className="anim-flame" style={{ lineHeight: 0, animationDelay: '0.6s' }}>
+              <FlameIcon filled size={38} />
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              position: 'absolute',
+              left: 144,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.7)',
+              border: '2px solid #9cc2ef',
+              zIndex: 10,
+            }}
+          />
+        )}
 
-        {/* Final star at the end overlapping the right edge — grey until reached, gold with next level number */}
+        {/* Final star at the end overlapping the right edge — grey until the goal, gold (and a spin) once reached */}
         <div
+          className={celebrate ? 'anim-star-spin' : ''}
           style={{
             position: 'absolute',
             right: -20.5,
@@ -339,7 +356,7 @@ function StreakStrip({ me }: { me: Player }) {
               color: reached ? '#7a4f00' : ACCENT,
             }}
           >
-            {me.level + 1}
+            {reached ? me.level : me.level + 1}
           </span>
         </div>
       </div>
@@ -377,9 +394,26 @@ function ProfileChip({ me }: { me: Player }) {
   )
 }
 
+/** Don't nag about an unspun wheel more than once every few minutes after "Later". */
+let wheelSnoozedUntil = 0
+const WHEEL_SNOOZE_MS = 5 * 60_000
+const STAR_SPIN_MS = 1200
+
 export default function MapScreen({ me, onStartBattle }: Props) {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const { location, connected, others } = useLive()
+  const { profile } = useProfile()
+
+  // A met week owes a spin: the star spins first, then the wheel comes up (unless snoozed). Once up it stays until it
+  // closes itself — the spin's own profile push clears pendingReward before the wheel has finished turning.
+  const pending = profile?.pendingReward === true
+  const [wheelOpen, setWheelOpen] = useState(false)
+  useEffect(() => {
+    if (!pending || Date.now() < wheelSnoozedUntil) return
+    const t = setTimeout(() => setWheelOpen(true), STAR_SPIN_MS)
+    return () => clearTimeout(t)
+  }, [pending])
+  const snooze = () => { wheelSnoozedUntil = Date.now() + WHEEL_SNOOZE_MS; setWheelOpen(false) }
 
   const statusText =
     location.status !== 'active' ? (location.resuming ? 'Locating…' : 'Location off')
@@ -399,7 +433,7 @@ export default function MapScreen({ me, onStartBattle }: Props) {
 
       {/* Top HUD */}
       <div className="absolute top-0 left-0 right-0 z-30 flex flex-col items-center gap-9 px-4 pt-(--top-gap) pointer-events-none">
-        <div className="pointer-events-auto"><StreakStrip me={me}/></div>
+        <div className="pointer-events-auto"><StreakStrip me={me} celebrate={pending && Date.now() >= wheelSnoozedUntil}/></div>
         <div className="flex items-center gap-2">
           <div
             data-testid="live-status"
@@ -456,6 +490,10 @@ export default function MapScreen({ me, onStartBattle }: Props) {
             onBattle={() => { setSelectedPlayer(null); onStartBattle(selectedPlayer) }}
           />
         </>
+      )}
+
+      {wheelOpen && (
+        <RewardWheelModal level={me.level} onClose={() => setWheelOpen(false)} onLater={snooze}/>
       )}
     </div>
   )

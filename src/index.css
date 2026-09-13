@@ -106,6 +106,19 @@ html, body, #root {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+/* "+2 Perfect!" on a counted rep: pops in, drifts up, fades out (ends invisible, so no unmount needed) */
+@keyframes floatAway {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.8); }
+  15%  { opacity: 1; transform: translateY(0) scale(1.12); }
+  65%  { opacity: 1; transform: translateY(-18px) scale(1); }
+  100% { opacity: 0; transform: translateY(-40px) scale(0.95); }
+}
+/* The map star when the week's goal is hit */
+@keyframes starSpin {
+  0%   { transform: translateY(-50%) rotate(0deg) scale(1); }
+  50%  { transform: translateY(-50%) rotate(180deg) scale(1.35); }
+  100% { transform: translateY(-50%) rotate(360deg) scale(1); }
+}
 @keyframes confettiFall {
   0% { opacity: 0; transform: translateY(-40px) rotate(var(--rot-start, 0deg)); }
   10% { opacity: 1; }
@@ -147,6 +160,8 @@ html, body, #root {
 .anim-bounce     { animation: resultBounce 1s cubic-bezier(.36,.07,.19,.97) both; }
 .anim-skeleton   { animation: skeletonPulse 1.5s ease-in-out infinite; }
 .anim-pop-in     { animation: popIn 0.3s cubic-bezier(.22,1,.36,1) both; }
+.anim-float-away { animation: floatAway 1.1s ease-out both; }
+.anim-star-spin  { animation: starSpin 1.2s cubic-bezier(.22,1,.36,1) both; }
 
 /* Tab changes (App.tsx TabStage): the new page pushes the old one out, sideways in the direction of the tab. The
    entering page has no fill-mode, so it's left with no transform once it lands (a transform would trap its z-30
@@ -200,8 +215,10 @@ html, body, #root {
 
 /* Still finish (so animationend fires and the old page unmounts), just instantly. */
 @media (prefers-reduced-motion: reduce) {
-  .tab-in-from-right, .tab-in-from-left, .tab-out-to-left, .tab-out-to-right, .anim-slide-in-right, .anim-shake, .anim-entry-wipe {
+  .tab-in-from-right, .tab-in-from-left, .tab-out-to-left, .tab-out-to-right, .anim-slide-in-right, .anim-shake, .anim-entry-wipe,
+  .anim-star-spin {
     animation-duration: 1ms;
   }
+  .anim-float-away { animation: floatAway 1.1s steps(1, end) both; }
   .anim-nudge-x { animation: none; }
 }

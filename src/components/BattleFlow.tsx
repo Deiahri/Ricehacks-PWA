@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BattleBreakdown, DuelToast, HpDuel } from './BattleHud'
+import { BattleBreakdown, DuelToast, HpDuel, RepXpPop } from './BattleHud'
 import CharacterSprite from './CharacterSprite'
 import CameraFeed from './CameraFeed'
 import { LockedExerciseCard } from './LockedExercises'
@@ -15,6 +15,7 @@ import { fitPayload, toRepDetail } from '../game/repDetail'
 import { useCombo } from '../game/useCombo'
 import { useRepSession } from '../game/useRepSession'
 import { avgForm, formatClock, formatDuration, repQuality, totalScore, type RepQuality } from '../game/scoring'
+import { xpForRep, xpForScores } from '../game/xp'
 import {
   COUNTDOWN_MS, DURATIONS, EXERCISE_OPTIONS, LOCKED_EXERCISES,
   type ChallengeResult, type DurationS, type SessionConfig, type SideResult,
@@ -510,10 +511,14 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, coach, onNe
 
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [earned, setEarned] = useState<number | null>(null)
+  const [xpEarned, setXpEarned] = useState<number | null>(null)
+  const [goalMet, setGoalMet] = useState(false)
   useEffect(() => subscribe(msg => {
     if (msg.type !== 'saved') return
     setSaveState(msg.ok ? 'saved' : msg.reason === 'no-db' ? 'no-db' : 'failed')
     if (typeof msg.bpAwarded === 'number') setEarned(msg.bpAwarded)
+    if (typeof msg.xpAwarded === 'number') setXpEarned(msg.xpAwarded)
+    if (msg.goalMet === true) setGoalMet(true)
   }), [subscribe])
 
   const [finalReps, setFinalReps] = useState<RepResult[] | null>(null)
@@ -601,7 +606,7 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, coach, onNe
         {phase === 'counting' && last && lastQ && (
           <div className="flex items-center justify-between mt-2">
             <span className="font-game font-bold text-sm" style={{ color: lastQ.color }}>{lastQ.emoji} {lastQ.label}</span>
-            <span className="font-game font-bold text-sm" style={{ color: lastQ.color }}>+{(last.score / 10).toFixed(1)} pts</span>
+            <span className="font-game font-bold text-sm" style={{ color: lastQ.color }}>+{xpForRep(last.score)} XP</span>
           </div>
         )}
       </div>
@@ -668,6 +673,9 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, coach, onNe
           <DuelToast key={cs.duel.seq} event={cs.duel.event} opponentName={opponentName}/>
         )}
 
+        {/* The rep that just counted, in XP — where the 1 / 2 point rule gets learned */}
+        {phase === 'counting' && last && <RepXpPop key={reps.length} formScore={last.score}/>}
+
         {phase === 'counting' && cue && (
           <div className="absolute left-3 right-16 bottom-3 px-3 py-2 rounded-xl pointer-events-none" style={{ background: '#ffffffee', border: '2px solid #c8d0e0' }}>
             <p className="font-game font-bold text-xs" style={{ color: session.status ? '#f59e0b' : '#1a2b4a' }}>{cue}</p>
@@ -702,6 +710,11 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, coach, onNe
             {isSolo && earned !== null && earned > 0 && (
               <div className="anim-pop-in mt-3 text-center font-game font-black text-base" style={{ color: '#b45309' }}>
                 ◆ +{earned} BP earned
+              </div>
+            )}
+            {isSolo && xpEarned !== null && xpEarned > 0 && (
+              <div className="anim-pop-in mt-1 text-center font-game font-black text-sm" style={{ color: goalMet ? '#3d9100' : ACCENT }}>
+                {goalMet ? `🎯 +${xpEarned} XP · Weekly goal reached! Level up ⭐` : `🎯 +${xpEarned} XP toward your weekly goal`}
               </div>
             )}
             {isSolo && saveState !== 'idle' && (
@@ -882,6 +895,7 @@ function PostBattleResult({ me, opponent, result, onExit }: { me: Player; oppone
               [`${opponent.name}'s score`, `${result.opponent.score} pts`, '#7a8ba8'],
               ['Your avg form', `${avgForm(result.you.repScores)}%`, '#58cc02'],
               ...(result.you.bpAwarded !== undefined ? [['Battle points earned', `◆ +${result.you.bpAwarded} BP`, '#b45309']] : []),
+              ['Weekly XP', `🎯 +${result.you.xpAwarded ?? (result.forfeit && result.winnerId !== result.you.id ? 0 : xpForScores(result.you.repScores))} XP`, ACCENT],
             ] as [string, string, string][]).map(([label, val, color]) => (
               <div key={label} className="flex items-center justify-between gap-3">
                 <span className="font-game text-sm truncate" style={{ color: '#7a8ba8' }}>{label}</span>
