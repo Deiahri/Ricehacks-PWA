@@ -20,10 +20,12 @@ interface Props {
   onPose?: (p: PoseEventPayload) => void
   /** Camera/model startup progress; 'running' = frames are flowing. */
   onPhase?: (phase: CameraPhase) => void
+  /** Draw the tracked pose over the video (off by default: it's a debugging aid). */
+  showSkeleton?: boolean
 }
 
-// Live camera + pose skeleton for the Workout Recording step. Fills its (relative) parent.
-export default function CameraFeed({ onPose: onPoseProp, onPhase }: Props) {
+// Live camera (+ optional pose skeleton) for the Workout Recording step. Fills its (relative) parent.
+export default function CameraFeed({ onPose: onPoseProp, onPhase, showSkeleton = false }: Props) {
   useWakeLock()
   const videoRef = useRef<HTMLVideoElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
@@ -33,10 +35,13 @@ export default function CameraFeed({ onPose: onPoseProp, onPhase }: Props) {
   const [error, setError] = useState('')
   const onPoseRef = useRef(onPoseProp)
   onPoseRef.current = onPoseProp
+  const skeletonRef = useRef(showSkeleton)
+  skeletonRef.current = showSkeleton
 
   const onPose = useCallback((p: PoseEventPayload) => {
     onPoseRef.current?.(p)
-    setFrame({ landmarks: p.landmarks, imageWidth: p.imageWidth, imageHeight: p.imageHeight, mirrored: p.mirrored })
+    // Only keep the frame (a re-render per camera frame) when it's drawn.
+    if (skeletonRef.current) setFrame({ landmarks: p.landmarks, imageWidth: p.imageWidth, imageHeight: p.imageHeight, mirrored: p.mirrored })
   }, [])
 
   const onError = useCallback((e: unknown) => {
@@ -57,7 +62,7 @@ export default function CameraFeed({ onPose: onPoseProp, onPhase }: Props) {
         muted
         autoPlay
       />
-      {frame && size.width > 0 && <PoseSkeleton frame={frame} width={size.width} height={size.height}/>}
+      {showSkeleton && frame && size.width > 0 && <PoseSkeleton frame={frame} width={size.width} height={size.height}/>}
 
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

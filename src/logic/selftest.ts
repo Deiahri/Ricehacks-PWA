@@ -12,6 +12,8 @@ import { DURATIONS } from '../game/types';
 import { COSMETICS, wornItems } from '../config/cosmetics';
 import { COACH } from '../config/coach';
 import { freshMemory, nextCoachEvent, projectedReps, setDoneMessage, statsMessage, verdict, type SetSnapshot } from '../coach/triggers';
+import { decodeTrack, frameCount, poseAt, PoseTrackRecorder, TRACK_BONES, TRACK_JOINTS, trackBounds, trackFps } from '../game/poseTrack';
+import { fitPayload, toRepDetail } from '../game/repDetail';
 
 const FPS = 30;
 const rad = (deg: number) => (deg * Math.PI) / 180;
@@ -181,6 +183,35 @@ const cosmeticChecks = (): [string, boolean][] => {
   ];
 };
 
+// Replays (src/game/poseTrack.ts, src/game/repDetail.ts): 30 fps camera frames onto a 10 fps grid, and back.
+const replayChecks = (): [string, boolean][] => {
+  const lm = (x: number, y: number, visibility = 1) => ({ x, y, z: 0, visibility });
+  const landmarks = Array.from({ length: 33 }, (_, i) => lm(0.25 + i / 100, 0.5));
+  landmarks[27] = lm(0.9, 0.9, 0.1); // left ankle hidden
+  const rec = new PoseTrackRecorder(1000, 2000, 10);
+  for (let t = 900; t <= 2000; t += 1000 / 30) rec.push({ landmarks, imageWidth: 720, imageHeight: 1280, timestampMs: t, mirrored: false });
+  const track = rec.encode();
+  const decoded = track && decodeTrack(track);
+  const pose = decoded ? poseAt(decoded, 0.3) : [];
+  const ankle = TRACK_JOINTS.indexOf(27);
+  const nose = pose[0];
+  const reps = run(SCENARIOS[0]).reps;
+  const detail = toRepDetail(reps.map((r) => ({ ...r })), 1000);
+  const big = { repScores: [90], repDetail: detail, track: track ? { ...track, frames: 'A'.repeat(250_000) } : undefined };
+  return [
+    ['replay: 1 s at 10 fps from 30 fps input = 10 frames', rec.frames === 10 && decoded !== null && frameCount(decoded) === 10],
+    ['replay: track shape matches the server (13 joints, 0.5625 aspect)', track?.joints === 13 && TRACK_JOINTS.length === 13 && track.aspect === 0.563],
+    ['replay: joints round-trip within a quantization step, hidden = null',
+      nose !== null && nose !== undefined && Math.abs(nose[0] / 0.563 - 0.25) < 0.005 && Math.abs(nose[1] - 0.5) < 0.005 && pose[ankle] === null],
+    ['replay: bones index the track joints', TRACK_BONES.every(([a, b]) => a >= 0 && b >= 0)],
+    ['replay: bounds cover the pose', decoded !== null && (trackBounds(decoded)?.w ?? 0) > 0],
+    ['replay: 5 fps for long sets', trackFps(60) === 10 && trackFps(120) === 5],
+    ['replay: reps carry monotonic times, offset from the count start',
+      reps.length === 3 && reps.every((r, i) => i === 0 || r.t > reps[i - 1].t) && detail[0].t === Math.round((reps[0].t - 1) * 100) / 100],
+    ['replay: an oversized final drops the track first', fitPayload(big).track === undefined && fitPayload(big).repDetail !== undefined],
+  ];
+};
+
 // Session scoring on top of the per-rep scores (src/game/scoring.ts; the server mirrors totalScore).
 const UNIT_CHECKS: [string, boolean][] = [
   ['totalScore: sum/10, rounded', totalScore([80, 95, 40]) === 22 && totalScore([]) === 0],
@@ -191,6 +222,7 @@ const UNIT_CHECKS: [string, boolean][] = [
   ...comboChecks(),
   ...coachChecks(),
   ...cosmeticChecks(),
+  ...replayChecks(),
 ];
 
 function run(s: Scenario): Exercise {

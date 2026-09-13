@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import CharacterSprite from './CharacterSprite'
+import WorkoutDetail from './WorkoutDetail'
 import { ACCENT, ACCENT_BG } from '../App'
 import { skinColors } from '../config/appearance'
 import type { Equipped } from '../config/cosmetics'
 import { EXERCISE_OPTIONS } from '../game/types'
 import { ApiError } from '../live/api'
 import { useWorkoutHistory, type WorkoutEntry } from '../live/useWorkoutHistory'
+import { useRecap, type Trend } from '../live/useWorkoutInsights'
 import { useProfile, type Friend } from '../live/ProfileProvider'
 
 type DayState = 'trained' | 'rest' | 'missed' | 'future'
@@ -149,14 +151,22 @@ function dayLabel(iso: string) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-function WorkoutRow({ w }: { w: WorkoutEntry }) {
+function WorkoutRow({ w, onOpen }: { w: WorkoutEntry; onOpen: () => void }) {
   const ex = EXERCISE_OPTIONS.find(o => o.id === w.exercise)
   const pill = w.result && RESULT_PILL[w.result]
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-2xl" style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}>
-      <div className="flex flex-col items-center flex-shrink-0" style={{ width: 44 }}>
+    <button
+      onClick={onOpen}
+      className="flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left w-full transition-transform active:scale-[0.98]"
+      style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}
+    >
+      <div className="relative flex flex-col items-center flex-shrink-0" style={{ width: 44 }}>
         <span className="text-xl leading-none">{ex?.icon ?? '🏃'}</span>
         <span className="text-[10px] font-game font-bold mt-1" style={{ color: '#7a8ba8' }}>{setLength(w.durationS)}</span>
+        {w.hasReplay && (
+          <span aria-label="Has a replay" className="absolute -top-1 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[7px] text-white"
+            style={{ background: '#4a90e2' }}>▶</span>
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -182,12 +192,54 @@ function WorkoutRow({ w }: { w: WorkoutEntry }) {
           {w.bp > 0 && <span className="font-bold" style={{ color: '#f59e0b' }}> · +{w.bp} BP</span>}
         </div>
       </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="flex-shrink-0 -ml-1">
+        <path d="M9 5l7 7-7 7" stroke="#c8d0e0" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
+  )
+}
+
+// ─── AI recap: how I've been doing lately ─────────────────────────
+const TREND_LOOK: Record<Trend, { emoji: string; bg: string; border: string; color: string }> = {
+  improving: { emoji: '📈', bg: '#f0fff0', border: '#9be36a', color: '#3d9100' },
+  steady:    { emoji: '➖', bg: ACCENT_BG, border: '#bcd6f5', color: ACCENT },
+  slipping:  { emoji: '📉', bg: '#fff8ec', border: '#ffd093', color: '#c97200' },
+  slacking:  { emoji: '💤', bg: '#fff0f0', border: '#fecaca', color: '#ff4b4b' },
+  new:       { emoji: '🌱', bg: '#f0fff0', border: '#9be36a', color: '#3d9100' },
+}
+
+/** Written by the server on first view and kept until my next workout (latestId changes = refetch). */
+function RecapCard({ latestId }: { latestId: string }) {
+  const { data, failed } = useRecap(latestId)
+  if (failed || data?.source === 'none') return null
+  const look = TREND_LOOK[data?.trend ?? 'steady']
+  return (
+    <div className="rounded-2xl p-3 mb-3" style={{ background: look.bg, border: `2.5px solid ${look.border}` }}>
+      {!data ? (
+        <div className="flex flex-col gap-2 py-1">
+          <p className="text-[11px] font-game" style={{ color: '#7a8ba8' }}>Looking over your recent sets…</p>
+          <div className="anim-skeleton h-3 rounded-full" style={{ background: '#dfe6f1', width: '85%' }}/>
+          <div className="anim-skeleton h-3 rounded-full" style={{ background: '#dfe6f1', width: '60%' }}/>
+        </div>
+      ) : (
+        <div className="anim-fade-up flex gap-2.5">
+          <span className="text-2xl leading-none mt-0.5">{look.emoji}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-game font-black text-sm" style={{ color: look.color }}>{data.headline}</span>
+              {data.source === 'gemini' && <span className="text-[9px] font-game font-black flex-shrink-0" style={{ color: '#9aaac4' }}>✨ AI</span>}
+            </div>
+            <p className="text-[13px] font-game mt-0.5" style={{ color: '#1a2b4a' }}>{data.text}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 function RecentWorkouts() {
   const { items, failed } = useWorkoutHistory()
+  const [open, setOpen] = useState<WorkoutEntry | null>(null)
   const note = (text: string) => (
     <p className="text-xs font-game text-center py-4" style={{ color: '#7a8ba8' }}>{text}</p>
   )
@@ -196,91 +248,19 @@ function RecentWorkouts() {
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-game font-black text-base" style={{ color: '#1a2b4a' }}>Recent Workouts</h3>
         {items && items.length > 0 && (
-          <span className="text-[11px] font-game" style={{ color: '#7a8ba8' }}>Last {items.length}</span>
+          <span className="text-[11px] font-game" style={{ color: '#7a8ba8' }}>Tap for replay & tips</span>
         )}
       </div>
+      {items && items.length > 0 && <RecapCard latestId={items[0].id}/>}
       {failed ? note("Couldn't load your workouts.")
         : !items ? note('Loading…')
         : items.length === 0 ? note("No workouts yet. Finish a set and it'll show up here.")
         : (
           <div className="flex flex-col gap-2">
-            {items.map(w => <WorkoutRow key={w.id} w={w}/>)}
+            {items.map(w => <WorkoutRow key={w.id} w={w} onOpen={() => setOpen(w)}/>)}
           </div>
         )}
-    </div>
-  )
-}
-
-// ─── Workout performance over time ────────────────────────────────
-// Each series is a recurring weekly goal; points are how well each
-// recording session scored (0–100) week over week.
-interface Series { label: string; color: string; values: number[] }
-
-const PROGRESS_WEEKS = ['W1', 'W2', 'W3', 'W4', 'W5']
-const PROGRESS_SERIES: Series[] = [
-  { label: 'Strength', color: '#58cc02', values: [55, 62, 70, 68, 82] },
-  { label: 'Cardio',   color: '#4a90e2', values: [40, 58, 52, 71, 78] },
-  { label: 'Mobility', color: '#a855f7', values: [65, 60, 74, 80, 88] },
-]
-
-function WorkoutProgressChart() {
-  // viewBox geometry
-  const W = 320, H = 172
-  const padL = 30, padR = 12, padT = 14, padB = 26
-  const plotW = W - padL - padR
-  const plotH = H - padT - padB
-  const maxY = 100
-  const cols = PROGRESS_WEEKS.length
-
-  const x = (i: number) => padL + (cols === 1 ? plotW / 2 : (plotW * i) / (cols - 1))
-  const y = (v: number) => padT + plotH - (v / maxY) * plotH
-
-  const gridLines = [0, 25, 50, 75, 100]
-
-  return (
-    <div className="mt-6 rounded-2xl p-4" style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}>
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="font-game font-black text-base" style={{ color: '#1a2b4a' }}>Session Progress</h3>
-        <span className="text-[11px] font-game" style={{ color: '#7a8ba8' }}>Score per week</span>
-      </div>
-
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ display: 'block' }}>
-        {/* horizontal gridlines + y labels */}
-        {gridLines.map(g => (
-          <g key={g}>
-            <line x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke="#e2e8f2" strokeWidth={1}/>
-            <text x={padL - 6} y={y(g) + 3} textAnchor="end" fontSize={9} fontFamily="'Nunito:Bold',sans-serif" fill="#9aaac4">{g}</text>
-          </g>
-        ))}
-
-        {/* x labels */}
-        {PROGRESS_WEEKS.map((w, i) => (
-          <text key={w} x={x(i)} y={H - 8} textAnchor="middle" fontSize={9} fontFamily="'Nunito:Bold',sans-serif" fill="#9aaac4">{w}</text>
-        ))}
-
-        {/* series lines + points */}
-        {PROGRESS_SERIES.map(s => {
-          const d = s.values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(v)}`).join(' ')
-          return (
-            <g key={s.label}>
-              <path d={d} fill="none" stroke={s.color} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"/>
-              {s.values.map((v, i) => (
-                <circle key={i} cx={x(i)} cy={y(v)} r={3.4} fill="#fff" stroke={s.color} strokeWidth={2.4}/>
-              ))}
-            </g>
-          )
-        })}
-      </svg>
-
-      {/* legend */}
-      <div className="flex items-center gap-4 mt-2 justify-center flex-wrap">
-        {PROGRESS_SERIES.map(s => (
-          <div key={s.label} className="flex items-center gap-1.5">
-            <div className="w-3 h-1.5 rounded-full" style={{ background: s.color }}/>
-            <span className="text-[11px] font-game font-bold" style={{ color: '#7a8ba8' }}>{s.label}</span>
-          </div>
-        ))}
-      </div>
+      {open && <WorkoutDetail entry={open} onClose={() => setOpen(null)}/>}
     </div>
   )
 }

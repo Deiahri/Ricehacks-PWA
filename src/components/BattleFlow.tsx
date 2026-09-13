@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { BattleBreakdown, DuelToast, HpDuel } from './BattleHud'
 import CharacterSprite from './CharacterSprite'
 import CameraFeed from './CameraFeed'
 import type { Player, BattleStep } from '../App'
@@ -8,6 +9,8 @@ import type { CameraPhase } from '../camera/usePoseCamera'
 import type { CoachRep } from '../coach/triggers'
 import { useCoach, type CoachApi, type CoachState } from '../coach/useCoach'
 import type { ChallengeHandle, Resolution } from '../game/useChallenge'
+import { QUALITY_CFG, Q_COLOR } from '../game/qualityLook'
+import { fitPayload, toRepDetail } from '../game/repDetail'
 import { useCombo } from '../game/useCombo'
 import { useRepSession } from '../game/useRepSession'
 import { avgForm, formatClock, formatDuration, repQuality, totalScore, type RepQuality } from '../game/scoring'
@@ -28,14 +31,6 @@ interface Props {
   challenge: ChallengeHandle
   onExit: () => void
 }
-
-const QUALITY_CFG: Record<RepQuality, { label: string; color: string; emoji: string }> = {
-  red:    { label: 'Poor Form', color: '#ff4b4b', emoji: '🔴' },
-  yellow: { label: 'Good',      color: '#f59e0b', emoji: '🟡' },
-  green:  { label: 'Great!',    color: '#58cc02', emoji: '🟢' },
-}
-
-const Q_COLOR: Record<RepQuality, string> = { red: '#ff4b4b', yellow: '#ffd700', green: '#58cc02' }
 
 const exerciseOption = (id: ExerciseName) => EXERCISE_OPTIONS.find(o => o.id === id)!
 const describe = (c: SessionConfig) => `${exerciseOption(c.exercise).label} · ${formatDuration(c.durationS)}`
@@ -205,7 +200,7 @@ function RevealPanel({ resolution, oppName }: { resolution: Resolution; oppName:
       >
         <span className="text-5xl">{opt.icon}</span>
         <span className="font-game font-black text-2xl" style={{ color: '#1a2b4a' }}>{opt.label}</span>
-        <span className="font-game font-bold text-sm" style={{ color: ACCENT }}>{formatDuration(config.durationS)} · most points wins</span>
+        <span className="font-game font-bold text-sm" style={{ color: ACCENT }}>{formatDuration(config.durationS)} · most damage wins</span>
         <span className="font-game text-xs text-center" style={{ color: '#7a8ba8' }}>{opt.hint}</span>
       </div>
     </div>
@@ -462,13 +457,13 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, coach, onNe
 
   const onRep = useCallback((rep: RepResult, all: RepResult[]) => {
     const score = totalScore(all.map(r => r.score))
-    if (!isSolo) sendRep(all.length, score, repQuality(rep.score))
+    if (!isSolo) sendRep(all.length, score, repQuality(rep.score), rep.score)
     comboRep.current()
     const start = countStartRef.current
     if (start !== null) coachRef.current.onRep(coachReps(all), performance.now() - start, config.durationS, score, oppExtra())
   }, [isSolo, sendRep, config.durationS, oppExtra])
   const session = useRepSession(config.exercise, onRep)
-  const { arm } = session
+  const { arm, takeTrack } = session
 
   // Solo: count down as soon as the camera is up. Challenge: tell the server; it starts both phones together.
   const [cameraReady, setCameraReady] = useState(false)
@@ -521,12 +516,19 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, coach, onNe
       const reps = repsRef.current
       setFinalReps(reps)
       const repScores = reps.map(r => r.score)
-      if (!isSolo) sendFinal(repScores)
-      else setSaveState(send({ type: 'solo_result', exercise: config.exercise, durationS: config.durationS, repScores }) ? 'saving' : 'offline')
+      // Rep timing + the pose track make the set replayable from Progress.
+      const start = countStartRef.current
+      const payload = fitPayload({
+        repScores,
+        repDetail: start === null ? undefined : toRepDetail(reps, start),
+        track: takeTrack() ?? undefined,
+      })
+      if (!isSolo) sendFinal(payload)
+      else setSaveState(send({ type: 'solo_result', exercise: config.exercise, durationS: config.durationS, ...payload }) ? 'saving' : 'offline')
       coachRef.current.finish(coachReps(reps), config.durationS, totalScore(repScores), oppExtra())
     }, 400)
     return () => clearTimeout(t)
-  }, [done, isSolo, sendFinal, send, config.exercise, config.durationS, oppExtra])
+  }, [done, isSolo, sendFinal, send, takeTrack, config.exercise, config.durationS, oppExtra])
 
   const reps = finalReps ?? session.reps
   const scores = reps.map(r => r.score)
@@ -571,7 +573,15 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, coach, onNe
 
         <CompetitionProgressBar user={reps.map(r => repQuality(r.score))} opp={isSolo ? undefined : cs.opp.qualities}/>
 
-        {!isSolo && (
+        {!isSolo && cs.hpMax !== null ? (
+          <HpDuel
+            duel={cs.duel}
+            hpMax={cs.hpMax}
+            mine={cs.loadouts?.[IDENTITY.id]}
+            theirs={cs.opponent ? cs.loadouts?.[cs.opponent.id] : undefined}
+            opponentName={opponentName}
+          />
+        ) : !isSolo && (
           <div className="flex items-center justify-between mt-2 font-game font-bold text-xs">
             <span style={{ color: '#1a2b4a' }}>You · {score} pts</span>
             <span className="truncate ml-3" style={{ color: '#7a8ba8' }}>{opponentName} · {cs.opp.score} pts</span>
@@ -642,6 +652,10 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, coach, onNe
               🔥 ×{combo.count}
             </div>
           </div>
+        )}
+
+        {!isSolo && phase === 'counting' && cs.duel?.event && (
+          <DuelToast key={cs.duel.seq} event={cs.duel.event} opponentName={opponentName}/>
         )}
 
         {phase === 'counting' && cue && (
@@ -761,7 +775,7 @@ function PostBattleResult({ me, opponent, result, onExit }: { me: Player; oppone
   const subtitle =
     outcome === 'win' ? (result.forfeit ? `${opponent.name} left the battle` : `You defeated ${opponent.name}`)
     : outcome === 'loss' ? `${opponent.name} won this round`
-    : 'Dead even: same score, same reps'
+    : result.battle ? 'Dead even: same damage, same score' : 'Dead even: same score, same reps'
   const sides: [string, SideResult][] = [['You', result.you], [opponent.name, result.opponent]]
 
   return (
@@ -803,8 +817,9 @@ function PostBattleResult({ me, opponent, result, onExit }: { me: Player; oppone
         </div>
       )}
 
-      {/* Centered group: result text + characters + scores */}
-      <div className="flex-1 flex flex-col items-center justify-center w-full z-10 overflow-y-auto">
+      {/* Centered group: result text + characters + scores (spacers centre it without clipping the top when it scrolls) */}
+      <div className="flex-1 flex flex-col items-center w-full z-10 overflow-y-auto">
+        <div className="flex-1 min-h-4"/>
         <div className="flex-shrink-0 text-center px-6">
           <div
             className="font-game font-black text-5xl"
@@ -843,6 +858,12 @@ function PostBattleResult({ me, opponent, result, onExit }: { me: Player; oppone
           ))}
         </div>
 
+        {result.battle && (
+          <div className="mx-6 mt-6 z-10 w-[calc(100%-48px)]">
+            <BattleBreakdown battle={result.battle} opponentName={opponent.name}/>
+          </div>
+        )}
+
         <div className="mx-6 mt-6 rounded-2xl p-4 z-10 w-[calc(100%-48px)]" style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}>
           <div className="font-game font-bold text-sm mb-3 text-center" style={{ color: '#7a8ba8' }}>FINAL SCORE</div>
           <div className="flex flex-col gap-2">
@@ -858,7 +879,11 @@ function PostBattleResult({ me, opponent, result, onExit }: { me: Player; oppone
               </div>
             ))}
           </div>
+          {result.battle?.you.surge && (
+            <p className="text-[11px] font-game text-center mt-2" style={{ color: '#c026d3' }}>Includes a 🪄 +50 BP wand surge</p>
+          )}
         </div>
+        <div className="flex-1 min-h-4"/>
       </div>
 
       <div className="flex-shrink-0 px-6 pt-6 w-full z-10" style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>

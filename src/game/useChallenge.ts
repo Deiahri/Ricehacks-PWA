@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useReducer } from 'react'
 import { useSocket } from '../live/LiveProvider'
 import type { ServerMessage } from '../live/usePresence'
+import type { FinalPayload } from './repDetail'
 import type { RepQuality } from './scoring'
-import { COUNTDOWN_MS, type ChallengeResult, type RemoteBrief, type SessionConfig } from './types'
+import {
+  COUNTDOWN_MS, type ChallengeResult, type DuelEvent, type DuelSide, type DuelView, type Loadout, type RemoteBrief,
+  type SessionConfig,
+} from './types'
 
 /** Why a challenge ended before a result. 'disconnected' = our own socket dropped. */
 export type EndStatus = 'declined' | 'cancelled' | 'timeout' | 'busy' | 'offline' | 'left' | 'disconnected'
@@ -25,13 +29,20 @@ export interface ChallengeState {
   goAt: number | null
   countdownMs: number
   opp: { reps: number; score: number; qualities: RepQuality[] }
+  /** Starting HP, from the go message (null = a server without the HP duel). */
+  hpMax: number | null
+  /** Each fighter's battle items, by presence connection id. */
+  loadouts: Record<string, Loadout> | null
+  /** Latest live HP duel; `seq` counts updates (a new event toast per update). */
+  duel: (DuelView & { event: DuelEvent | null; seq: number }) | null
   result: ChallengeResult | null
   ended: EndStatus | null
 }
 
 const IDLE: ChallengeState = {
   phase: 'idle', challengeId: null, opponent: null, myPick: null, resolution: null,
-  goAt: null, countdownMs: COUNTDOWN_MS, opp: { reps: 0, score: 0, qualities: [] }, result: null, ended: null,
+  goAt: null, countdownMs: COUNTDOWN_MS, opp: { reps: 0, score: 0, qualities: [] },
+  hpMax: null, loadouts: null, duel: null, result: null, ended: null,
 }
 
 type Action =
@@ -67,7 +78,20 @@ function onServer(s: ChallengeState, m: ServerMessage, at: number): ChallengeSta
         },
       }
     case 'challenge_go':
-      return { ...s, phase: 'live', goAt: at, countdownMs: Number(m.countdownMs) || COUNTDOWN_MS }
+      return {
+        ...s, phase: 'live', goAt: at, countdownMs: Number(m.countdownMs) || COUNTDOWN_MS,
+        hpMax: typeof m.hpMax === 'number' ? m.hpMax : null,
+        loadouts: (m.loadouts as Record<string, Loadout> | undefined) ?? null,
+        duel: null,
+      }
+    case 'challenge_hp':
+      return {
+        ...s,
+        duel: {
+          hpMax: Number(m.hpMax), you: m.you as DuelSide, opponent: m.opponent as DuelSide,
+          event: (m.event as DuelEvent | null) ?? null, seq: (s.duel?.seq ?? 0) + 1,
+        },
+      }
     case 'challenge_opp': {
       const reps = Number(m.reps) || 0
       const qualities = reps > s.opp.qualities.length ? [...s.opp.qualities, m.quality as RepQuality] : s.opp.qualities
@@ -126,11 +150,13 @@ export function useChallenge() {
     send({ type: 'challenge_pick', challengeId: id, ...config })
   }, [id, send])
   const ready = useCallback(() => send({ type: 'challenge_ready', challengeId: id }), [id, send])
+  /** A rep landed: running totals, its grade, and its form (the server turns that into HP damage). */
   const rep = useCallback(
-    (reps: number, score: number, quality: RepQuality) => send({ type: 'challenge_rep', challengeId: id, reps, score, quality }),
+    (reps: number, score: number, quality: RepQuality, formScore: number) =>
+      send({ type: 'challenge_rep', challengeId: id, reps, score, quality, formScore }),
     [id, send],
   )
-  const final = useCallback((repScores: number[]) => send({ type: 'challenge_final', challengeId: id, repScores }), [id, send])
+  const final = useCallback((payload: FinalPayload) => send({ type: 'challenge_final', challengeId: id, ...payload }), [id, send])
   const reset = useCallback(() => dispatch({ type: 'reset' }), [])
 
   return { state, request, cancel, respond, pick, ready, rep, final, reset }

@@ -36,6 +36,46 @@ export interface SideResult extends RemoteBrief {
   bpAwarded?: number
 }
 
+/** What a fighter's worn items do in a battle (the server's battle-effects.mjs loadoutOf). */
+export interface Loadout {
+  shield: boolean
+  gauntlet: boolean
+  hat: boolean
+  wand: boolean
+}
+
+/** One fighter in the HP duel (the server's battle-effects.mjs SideOut). */
+export interface DuelSide {
+  dealt: number
+  taken: number
+  hp: number
+  /** Damage my shield blocked. */
+  absorbed: number
+  gauntletBonus: number
+  /** My reps their warlock hat turned into −1. */
+  cursedReps: number[]
+  cursesCast: number
+  cursesSuffered: number
+  /** Current / best run of perfect reps (the magic wand needs 5). */
+  streak: number
+  bestStreak: number
+  /** The magic wand fired: +50 BP. */
+  surge: boolean
+  rawScore: number
+  reps: number
+  loadout: Loadout
+}
+
+/** The HP duel from my side. */
+export interface DuelView {
+  hpMax: number
+  you: DuelSide
+  opponent: DuelSide
+}
+
+/** Something to toast during a live battle. by / who = 'you' means it's yours. */
+export type DuelEvent = { kind: 'curse'; by: 'you' | 'opponent' } | { kind: 'surge'; who: 'you' | 'opponent' }
+
 export interface ChallengeResult {
   you: SideResult
   opponent: SideResult
@@ -43,4 +83,8 @@ export interface ChallengeResult {
   winnerId: string | null
   /** True when the loser left mid-challenge. */
   forfeit: boolean
+  /** The HP duel as settled (servers before the item rules don't send it). */
+  battle?: DuelView
+  /** The stored workout, for the replay screen. */
+  workoutId?: string
 }

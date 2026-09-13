@@ -11,11 +11,15 @@ export interface WorkoutEntry {
   durationS: number
   score: number | null
   reps: number | null
+  /** Mean form 0-100 (null for some older battles). */
+  avgForm: number | null
   bp: number
   forfeit: boolean
   opponent: { name: string; score: number | null } | null
   /** null for solo sets. */
   result: 'win' | 'loss' | 'draw' | null
+  /** A pose track was recorded, so the replay shows a moving figure. */
+  hasReplay: boolean
 }
 
 /** My latest workouts, newest first (GET /api/workouts), fetched when the caller mounts. */

@@ -43,6 +43,8 @@ export type RepResult = {
   subscores: Record<string, number>;
   cues: string[];
   durationS: number;
+  /** When the rep finished, on the clock passed to update() (seconds). */
+  t: number;
 };
 
 type Evaluation = { subscores: Record<string, number>; cues: string[] };
@@ -166,6 +168,7 @@ export abstract class Exercise {
       subscores: rounded,
       cues: cues.length ? cues : ['Good rep'],
       durationS: Math.round(duration * 100) / 100,
+      t: Math.round(t * 1000) / 1000,
     };
     this.reps.push(rep);
     this.notice = '';

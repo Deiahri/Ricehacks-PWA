@@ -70,6 +70,7 @@ function ShopItemCard({ item, index, cost, state, busy, onTap }: {
         />
       </div>
       <p style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 13, lineHeight: '16px', color: '#1a2b4a' }}>{item.name}</p>
+      <p style={{ fontFamily: "'Nunito:Bold',sans-serif", fontWeight: 700, fontSize: 10.5, lineHeight: '14px', color: item.glowColor }}>⚔ {item.effect}</p>
       <p style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, fontSize: 10, lineHeight: '14px', color: '#4a6080', flexGrow: 1 }}>{item.description}</p>
       <button
         onClick={onTap}
