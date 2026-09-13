@@ -6,9 +6,12 @@ import NotificationsScreen from './components/NotificationsScreen'
 import ProfileScreen from './components/ProfileScreen'
 import BattleFlow from './components/BattleFlow'
 import InstallHint from './components/InstallHint'
+import UsernamePicker from './components/UsernamePicker'
 import { IncomingChallengeModal, OutgoingChallengeCard, Toast } from './components/ChallengeOverlays'
+import type { Equipped } from './config/cosmetics'
 import { useChallenge, type EndStatus } from './game/useChallenge'
 import { LiveProvider, useSocket } from './live/LiveProvider'
+import { ProfileProvider, useProfile, type Friend } from './live/ProfileProvider'
 import { IDENTITY } from './live/usePresence'
 
 export type Tab = 'calendar' | 'leaderboard' | 'map' | 'notifications' | 'profile'
@@ -21,32 +24,16 @@ export interface Appearance {
   shirt: string
 }
 
-// Equippable gear — hat sits on the head, shield in the defence hand,
-// weapon (wand or gauntlet) in the handheld slot.
-export interface Equipment {
-  hat?: boolean
-  shield?: boolean
-  weapon?: 'wand' | 'gauntlet'
-}
-
-// Randomly gear up an NPC with up to 2 distinct-slot items.
-function randomEquipment(): Equipment {
-  const slots: (keyof Equipment)[] = ['hat', 'shield', 'weapon']
-  const shuffled = [...slots].sort(() => Math.random() - 0.5)
-  const count = Math.floor(Math.random() * 3) // 0, 1 or 2 items
-  const eq: Equipment = {}
-  for (const slot of shuffled.slice(0, count)) {
-    if (slot === 'weapon') eq.weapon = Math.random() < 0.5 ? 'wand' : 'gauntlet'
-    else eq[slot] = true
-  }
-  return eq
-}
+// Worn cosmetics by slot (head / offhand / mainhand); art and placement are in src/config/cosmetics.ts.
+export type Equipment = Equipped
 
 export interface Player {
   id: number
   /** Presence connection id, for live players on the map (the challenge target). */
   remoteId?: string
   name: string
+  /** Account username, once they've picked one (friend requests go to this). */
+  username?: string | null
   level: number
   power: number
   speed: number
@@ -65,30 +52,22 @@ export interface Player {
 export const ACCENT = '#4a90e2'
 export const ACCENT_BG = '#eff5ff'
 
+/** Me before my account loads; Game() fills in name, level, BP, record and gear from the server. */
 export const ME: Player = {
   id: 0,
-  name: 'Alex Chen',
-  level: 9,
+  name: 'You',
+  level: 1,
   power: 68,
   speed: 74,
   evasion: 82,
-  bp: 285,
-  wins: 14,
-  losses: 6,
+  bp: 0,
+  wins: 0,
+  losses: 0,
   x: 50,
   y: 65,
   appearance: { skin: '#f0c68d', skinOutline: '#be8d4b', eye: '#874c24', shirt: '#c3a0e6' },
-  equipment: {}, // MC starts with no gear (can afford the Low Tier Shield)
+  equipment: {},
 }
-
-export const NEARBY_PLAYERS: Player[] = [
-  { id: 1, name: 'Jordan K.', level: 12, power: 78, speed: 85, evasion: 62, bp: 340, wins: 20, losses: 8,  x: 30, y: 40,
-    appearance: { skin: '#d9a066', skinOutline: '#a9743f', eye: '#3e6fa3', shirt: '#e98a8a' }, equipment: randomEquipment() },
-  { id: 2, name: 'Sam R.',    level: 8,  power: 92, speed: 45, evasion: 38, bp: 210, wins: 11, losses: 9,  x: 70, y: 35,
-    appearance: { skin: '#8d5524', skinOutline: '#5e3312', eye: '#2e2a26', shirt: '#7fb0e0' }, equipment: randomEquipment() },
-  { id: 4, name: 'Casey L.', level: 15, power: 65, speed: 70, evasion: 88, bp: 520, wins: 30, losses: 12, x: 60, y: 56,
-    appearance: { skin: '#c68642', skinOutline: '#8c5a2b', eye: '#3e7d4f', shirt: '#b98be0' }, equipment: randomEquipment() },
-]
 
 // ── Dumbbell icon for the map/workout CTA ──
 function DumbbellIcon({ color = '#fff' }: { color?: string }) {
@@ -277,9 +256,24 @@ function Game() {
   const challenge = useChallenge()
   const { state: cs, respond: respondChallenge, reset: resetChallenge, cancel: cancelChallenge } = challenge
   const { connected, send } = useSocket()
+  const account = useProfile()
+  const { profile } = account
+  // No username yet: pick one first. While the server can't be reached, a cached name is enough to play.
+  const [skipName, setSkipName] = useState(false)
+  const needsName = !skipName && (account.status === 'ready' ? !profile?.username : account.status !== 'no-db' && !account.username)
 
-  const me: Player = { ...ME, name: IDENTITY.name, appearance: { ...ME.appearance, shirt: IDENTITY.shirt } }
-  const opponent = cs.opponent ? toPlayer(cs.opponent, ME) : null
+  const me: Player = {
+    ...ME,
+    name: account.username ?? IDENTITY.name,
+    username: account.username,
+    level: profile?.level ?? ME.level,
+    bp: profile?.bp ?? ME.bp,
+    wins: profile?.wins ?? ME.wins,
+    losses: profile?.losses ?? ME.losses,
+    appearance: { ...ME.appearance, shirt: IDENTITY.shirt },
+    equipment: profile?.equipped ?? {},
+  }
+  const opponent = cs.opponent ? toPlayer(cs.opponent, me) : null
   const soloActive = battleStep !== null && isSoloWorkout
 
   // Accepted, on either phone: into the battle flow.
@@ -317,7 +311,12 @@ function Game() {
       setToast('Not connected yet. Try again in a moment.')
       return
     }
-    challenge.request({ id: player.remoteId, name: player.name, shirt: player.appearance.shirt })
+    challenge.request({ id: player.remoteId, name: player.name, shirt: player.appearance.shirt, equipped: player.equipment })
+  }
+
+  const challengeFriend = (f: Friend) => {
+    if (!f.presenceId) return
+    startBattle(toPlayer({ id: f.presenceId, name: f.username, username: f.username, shirt: f.shirt ?? ME.appearance.shirt, equipped: f.equipped }, me))
   }
 
   const startSoloWorkout = () => {
@@ -331,6 +330,8 @@ function Game() {
     setBattleStep(null)
     setIsSoloWorkout(false)
   }
+
+  if (needsName) return <UsernamePicker mode="first" onSkip={() => setSkipName(true)}/>
 
   return (
     <>
@@ -346,12 +347,12 @@ function Game() {
         />
       ) : (
         <>
-          {tab === 'map'           && <MapScreen me={ME} onStartBattle={startBattle}/>}
+          {tab === 'map'           && <MapScreen me={me} onStartBattle={startBattle}/>}
           {tab === 'map'           && <InstallHint/>}
           {tab === 'calendar'      && <CalendarScreen/>}
-          {tab === 'leaderboard'   && <LeaderboardScreen/>}
+          {tab === 'leaderboard'   && <LeaderboardScreen onChallenge={challengeFriend}/>}
           {tab === 'notifications' && <NotificationsScreen/>}
-          {tab === 'profile'       && <ProfileScreen me={ME}/>}
+          {tab === 'profile'       && <ProfileScreen me={me}/>}
 
           <BottomNav tab={tab} setTab={setTab} onWorkoutTap={startSoloWorkout} notificationCount={2}/>
         </>
@@ -373,7 +374,9 @@ export default function App() {
       >
         {/* App-level so the socket (and any challenge) survives tab switches and the battle flow */}
         <LiveProvider>
-          <Game/>
+          <ProfileProvider>
+            <Game/>
+          </ProfileProvider>
         </LiveProvider>
       </div>
     </div>

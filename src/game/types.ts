@@ -1,6 +1,8 @@
+import type { Equipped } from '../config/cosmetics'
 import type { ExerciseName } from '../logic/exercises'
 
-export const DURATIONS = [30, 60, 120, 300] as const
+/** Set lengths in seconds; the server allows the same list (game-config.mjs). */
+export const DURATIONS = [15, 30, 60, 120, 300] as const
 export type DurationS = (typeof DURATIONS)[number]
 
 export interface SessionConfig {
@@ -21,12 +23,15 @@ export interface RemoteBrief {
   id: string
   name: string
   shirt: string
+  equipped?: Equipped
 }
 
 export interface SideResult extends RemoteBrief {
   reps: number
   score: number
   repScores: number[]
+  /** Battle points this side earned (0 without an account). */
+  bpAwarded?: number
 }
 
 export interface ChallengeResult {

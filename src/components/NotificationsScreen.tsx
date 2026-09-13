@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Person, Avatar, PersonRow, INITIAL_INCOMING_REQUESTS } from './CalendarScreen'
+import { PersonRow } from './CalendarScreen'
+import { useProfile } from '../live/ProfileProvider'
 
 const ACCENT = '#4a90e2'
 
@@ -36,11 +37,22 @@ function NotifIcon({ type }: { type: Notif['type'] }) {
 }
 
 export default function NotificationsScreen() {
-  const [incoming, setIncoming] = useState<Person[]>(INITIAL_INCOMING_REQUESTS)
+  const { profile, friends, respond: answerRequest } = useProfile()
+  const incoming = friends.incoming
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const respond = (name: string, accept: boolean) => {
-    setIncoming(prev => prev.filter(p => p.name !== name))
-    if (accept) { /* accepted friend would be added to friends list */ }
+  const respond = async (name: string, accept: boolean) => {
+    if (busy) return
+    setBusy(name)
+    setError(null)
+    try {
+      await answerRequest(name, accept)
+    } catch {
+      setError("Couldn't reach the server. Try again.")
+    } finally {
+      setBusy(null)
+    }
   }
 
   return (
@@ -64,18 +76,21 @@ export default function NotificationsScreen() {
               </span>
             )}
           </div>
+          {error && <p className="text-xs font-game font-bold mb-2" style={{ color: '#ff4b4b' }}>{error}</p>}
           {incoming.length === 0 ? (
-            <p className="text-xs font-game" style={{ color: '#7a8ba8' }}>No pending requests.</p>
+            <p className="text-xs font-game" style={{ color: '#7a8ba8' }}>
+              {profile?.username ? 'No pending requests.' : 'Pick a username so friends can find you.'}
+            </p>
           ) : (
             <div className="flex flex-col gap-2">
               {incoming.map(p => (
                 <PersonRow
-                  key={p.name}
-                  person={p}
+                  key={p.username}
+                  person={{ name: p.username, shirt: p.shirt ?? '#7fb0e0', level: p.level, equipped: p.equipped }}
                   right={
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-shrink-0" style={{ opacity: busy === p.username ? 0.5 : 1 }}>
                       <button
-                        onClick={() => respond(p.name, true)}
+                        onClick={() => void respond(p.username, true)}
                         aria-label="Accept"
                         className="w-9 h-9 rounded-full flex items-center justify-center transition-transform active:scale-90"
                         style={{ background: '#58cc02', boxShadow: '0 2px 8px rgba(88,204,2,0.35)' }}
@@ -85,7 +100,7 @@ export default function NotificationsScreen() {
                         </svg>
                       </button>
                       <button
-                        onClick={() => respond(p.name, false)}
+                        onClick={() => void respond(p.username, false)}
                         aria-label="Decline"
                         className="w-9 h-9 rounded-full flex items-center justify-center transition-transform active:scale-90"
                         style={{ background: '#fff', border: '2px solid #c8d0e0' }}

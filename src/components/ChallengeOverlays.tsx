@@ -11,7 +11,7 @@ function SpriteTile({ player }: { player: Player }) {
       className="w-[64px] h-[64px] rounded-2xl flex items-center justify-center flex-shrink-0"
       style={{ background: `${ACCENT}22`, border: `2px solid ${ACCENT}44` }}
     >
-      <CharacterSprite size="sm" {...player.appearance} {...player.equipment}/>
+      <CharacterSprite size="sm" {...player.appearance} equipped={player.equipment}/>
     </div>
   )
 }

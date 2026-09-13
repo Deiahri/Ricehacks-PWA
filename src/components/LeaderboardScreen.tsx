@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { LocalLeaderboard, FriendsSection, LEADERBOARD } from './CalendarScreen'
+import type { Friend } from '../live/ProfileProvider'
 
-export default function LeaderboardScreen() {
+export default function LeaderboardScreen({ onChallenge }: { onChallenge: (f: Friend) => void }) {
   const [view, setView] = useState<'local' | 'friends'>('local')
 
   const sorted = [...LEADERBOARD].sort((a, b) => b.score - a.score).map((e, i) => ({ ...e, rank: i + 1 }))
@@ -43,7 +44,7 @@ export default function LeaderboardScreen() {
       <div className="flex-1 overflow-y-auto pb-24 px-4">
         {view === 'local'
           ? <LocalLeaderboard sorted={sorted} me={me}/>
-          : <FriendsSection/>
+          : <FriendsSection onChallenge={onChallenge}/>
         }
       </div>
     </div>

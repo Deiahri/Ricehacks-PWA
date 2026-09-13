@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import CharacterSprite from './CharacterSprite'
 import { ACCENT, ACCENT_BG } from '../App'
+import type { Equipped } from '../config/cosmetics'
+import { ApiError } from '../live/api'
+import { useProfile, type Friend } from '../live/ProfileProvider'
 
 type DayState = 'trained' | 'rest' | 'missed' | 'future'
 
@@ -223,35 +226,20 @@ function WorkoutProgressChart() {
 }
 
 // ─── Friends / requests ───────────────────────────────────────────
-export interface Person { name: string; shirt: string; level: number }
-
-export const INITIAL_INCOMING_REQUESTS: Person[] = [
-  { name: 'Morgan W.', shirt: '#9abae0', level: 14 },
-  { name: 'Riley M.',  shirt: '#e98a8a', level: 6  },
-]
-
-interface Friend {
-  name: string
-  shirt: string
-  level: number
-  bp: number
-  wins: number
-  losses: number
-}
-
-const FRIENDS: Friend[] = [
-  { name: 'Casey L.',  shirt: '#c3a0e6', level: 15, bp: 520, wins: 30, losses: 12 },
-  { name: 'Jordan K.', shirt: '#e98a8a', level: 12, bp: 340, wins: 20, losses: 8  },
-  { name: 'Taylor P.', shirt: '#8fd6b0', level: 11, bp: 320, wins: 18, losses: 10 },
-  { name: 'Sam R.',    shirt: '#7fb0e0', level: 8,  bp: 210, wins: 11, losses: 9  },
-]
+export interface Person { name: string; shirt: string; level: number; equipped?: Equipped }
 
 // Full-screen friend profile — mirrors the stats layout on the user's own profile
-function FriendProfile({ friend, rank, onClose }: { friend: Friend; rank: number; onClose: () => void }) {
-  const [challenged, setChallenged] = useState(false)
+function FriendProfile({ friend, rank, onClose, onChallenge }: {
+  friend: Friend
+  rank: number
+  onClose: () => void
+  onChallenge: (f: Friend) => void
+}) {
   const color   = ACCENT
   const bg      = ACCENT_BG
-  const winRate = Math.round((friend.wins / (friend.wins + friend.losses)) * 100)
+  const played  = friend.wins + friend.losses
+  const winRate = played ? Math.round((friend.wins / played) * 100) : 0
+  const canBattle = !!friend.online && !friend.busy && !!friend.presenceId
 
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto anim-fade-up" style={{ background: '#ffffff' }}>
@@ -271,7 +259,7 @@ function FriendProfile({ friend, rank, onClose }: { friend: Friend; rank: number
 
         <p className="text-center mb-4 whitespace-nowrap" style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 22, lineHeight: '28px', color: '#1a2b4a' }}>
           <span style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900 }}>#{rank}</span>
-          <span style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400 }}> in Dallas</span>
+          <span style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400 }}> among friends</span>
         </p>
 
         <div className="flex items-start gap-4 px-5">
@@ -279,15 +267,15 @@ function FriendProfile({ friend, rank, onClose }: { friend: Friend; rank: number
             style={{ width: 160, height: 200, background: '#fff', border: `2.028px solid ${color}`, boxShadow: `0 6px 12px ${color}33`, isolation: 'isolate', zIndex: 1 }}>
             <div className="absolute inset-0 flex items-end justify-center overflow-visible">
               <div style={{ transform: 'scale(1.25)', transformOrigin: 'bottom center' }}>
-                <CharacterSprite size="lg" animate shirt={friend.shirt}/>
+                <CharacterSprite size="lg" animate shirt={friend.shirt ?? undefined} equipped={friend.equipped}/>
               </div>
             </div>
           </div>
 
           <div className="flex flex-col items-center text-center gap-2 pt-2 flex-1 min-w-0">
-            <p className="whitespace-nowrap" style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 22, lineHeight: '28px', color: '#1a2b4a' }}>{friend.name}</p>
-            <p style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, fontSize: 14, lineHeight: '15px', color: '#7a8ba8', marginTop: -4 }}>
-              @{friend.name.replace(/[^a-zA-Z]/g, '').toLowerCase()}
+            <p className="whitespace-nowrap truncate max-w-full" style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 22, lineHeight: '28px', color: '#1a2b4a' }}>{friend.username}</p>
+            <p style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, fontSize: 14, lineHeight: '15px', color: friend.online ? '#58cc02' : '#7a8ba8', marginTop: -4 }}>
+              {friend.online ? '● Online' : '○ Offline'}
             </p>
             <div className="flex items-center gap-2 mt-1">
               <div className="flex items-center px-3 py-1 rounded-full" style={{ background: color }}>
@@ -322,44 +310,37 @@ function FriendProfile({ friend, rank, onClose }: { friend: Friend; rank: number
         </div>
       </div>
 
-      {/* Challenge to battle */}
+      {/* Challenge to battle — live battles need them online and not already in a set */}
       <div className="px-5 pt-6">
         <button
-          onClick={() => setChallenged(true)}
-          disabled={challenged}
+          onClick={() => { onChallenge(friend); onClose() }}
+          disabled={!canBattle}
           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-game font-black text-base text-white transition-transform active:scale-95"
           style={{
-            background: challenged ? '#9aaac4' : 'linear-gradient(145deg, #ff6b6b, #ff4b4b)',
-            boxShadow: challenged ? 'none' : '0 6px 18px rgba(255,75,75,0.4)',
+            background: canBattle ? 'linear-gradient(145deg, #ff6b6b, #ff4b4b)' : '#9aaac4',
+            boxShadow: canBattle ? '0 6px 18px rgba(255,75,75,0.4)' : 'none',
           }}
         >
-          {challenged ? (
-            <>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Battle Request Sent
-            </>
-          ) : (
-            <>⚔️ Challenge to Battle</>
-          )}
+          ⚔️ Challenge to Battle
         </button>
-        {challenged && (
-          <p className="text-center text-xs font-game mt-2" style={{ color: '#7a8ba8' }}>
-            {friend.name} will be notified of your challenge.
-          </p>
-        )}
+        <p className="text-center text-xs font-game mt-2" style={{ color: '#7a8ba8' }}>
+          {canBattle ? `${friend.username} is online. They'll get your request right away.`
+            : friend.busy ? `${friend.username} is in a workout right now.`
+            : `${friend.username} is offline. Battles need you both online.`}
+        </p>
       </div>
       <div style={{ height: 40 }}/>
     </div>
   )
 }
 
-export function Avatar({ shirt }: { shirt: string }) {
+export function Avatar({ shirt, equipped }: { shirt: string; equipped?: Equipped }) {
   return (
     <div
       className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
       style={{ background: ACCENT_BG, border: `2px solid ${ACCENT}` }}
     >
-      <CharacterSprite size="xs" shirt={shirt}/>
+      <CharacterSprite size="xs" shirt={shirt} equipped={equipped}/>
     </div>
   )
 }
@@ -376,7 +357,7 @@ export function PersonRow({
       className="flex items-center gap-3 px-3 py-2.5 rounded-2xl"
       style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}
     >
-      <Avatar shirt={person.shirt}/>
+      <Avatar shirt={person.shirt} equipped={person.equipped}/>
       <div className="flex-1 min-w-0">
         <span className="font-game font-bold text-sm truncate block" style={{ color: '#1a2b4a' }}>{person.name}</span>
         <div className="flex items-center gap-2">
@@ -396,9 +377,16 @@ function FriendRow({ friend, rank, onOpen }: { friend: Friend; rank: number; onO
       style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}
     >
       <RankBadge rank={rank}/>
-      <Avatar shirt={friend.shirt}/>
+      <div className="relative flex-shrink-0">
+        <Avatar shirt={friend.shirt ?? '#7fb0e0'} equipped={friend.equipped}/>
+        <span
+          aria-label={friend.online ? 'Online' : 'Offline'}
+          className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full"
+          style={{ background: friend.online ? '#58cc02' : '#c8d0e0', border: '2.5px solid #f5f7fb' }}
+        />
+      </div>
       <div className="flex-1 min-w-0">
-        <span className="font-game font-bold text-sm truncate block" style={{ color: '#1a2b4a' }}>{friend.name}</span>
+        <span className="font-game font-bold text-sm truncate block" style={{ color: '#1a2b4a' }}>{friend.username}</span>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-game font-bold" style={{ color: ACCENT }}>Lvl {friend.level}</span>
         </div>
@@ -414,20 +402,43 @@ function FriendRow({ friend, rank, onOpen }: { friend: Friend; rank: number; onO
   )
 }
 
-function FriendsSection() {
+const REQUEST_ERRORS: Record<string, (name: string) => string> = {
+  'not-found': n => `No player called @${n}.`,
+  'already-friends': n => `You and @${n} are already friends.`,
+  self: () => "That's you!",
+  'no-username': () => 'Pick a username first.',
+  offline: () => "Can't reach the server. Try again.",
+  'no-db': () => "The server isn't storing accounts right now.",
+}
+
+function FriendsSection({ onChallenge }: { onChallenge: (f: Friend) => void }) {
+  const { friends, sendRequest: requestFriend } = useProfile()
   const [query, setQuery] = useState('')
-  const [justSent, setJustSent] = useState(false)
-  const [openFriend, setOpenFriend] = useState<Friend | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null)
+  const [openName, setOpenName] = useState<string | null>(null)
 
-  const rankedFriends = [...FRIENDS].sort((a, b) => b.bp - a.bp)
-  const openRank = openFriend ? rankedFriends.findIndex(f => f.name === openFriend.name) + 1 : 0
+  // Looked up by name on every render so the online dot stays live while the profile is open.
+  const rankedFriends = [...friends.friends].sort((a, b) => b.bp - a.bp)
+  const openIndex = rankedFriends.findIndex(f => f.username === openName)
+  const openFriend = openIndex >= 0 ? rankedFriends[openIndex] : null
+  const openRank = openIndex + 1
 
-  const sendRequest = () => {
-    const name = query.trim()
-    if (!name) return
-    setQuery('')
-    setJustSent(true)
-    setTimeout(() => setJustSent(false), 1600)
+  const sendRequest = async () => {
+    const name = query.trim().replace(/^@/, '')
+    if (!name || busy) return
+    setBusy(true)
+    setNote(null)
+    try {
+      const status = await requestFriend(name)
+      setQuery('')
+      setNote({ ok: true, text: status === 'accepted' ? `You and @${name} are now friends!` : `Friend request sent to @${name}!` })
+    } catch (e) {
+      const reason = REQUEST_ERRORS[e instanceof ApiError ? e.code : '']
+      setNote({ ok: false, text: reason ? reason(name) : 'Something went wrong. Try again.' })
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -453,34 +464,48 @@ function FriendsSection() {
               <input
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') sendRequest() }}
+                onKeyDown={e => { if (e.key === 'Enter') void sendRequest() }}
                 placeholder="Add a friend by username"
-                className="flex-1 bg-transparent outline-none font-game text-sm"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className="flex-1 min-w-0 bg-transparent outline-none font-game text-sm"
                 style={{ color: '#1a2b4a' }}
               />
             </div>
             <button
-              onClick={sendRequest}
-              className="px-4 py-2.5 rounded-2xl font-game font-bold text-sm text-white transition-transform active:scale-95 flex-shrink-0"
+              onClick={() => void sendRequest()}
+              disabled={busy}
+              className="px-4 py-2.5 rounded-2xl font-game font-bold text-sm text-white transition-transform active:scale-95 flex-shrink-0 disabled:opacity-60"
               style={{ background: '#58cc02', boxShadow: '0 2px 10px rgba(88,204,2,0.35)' }}
             >
-              Send
+              {busy ? '…' : 'Send'}
             </button>
           </div>
-          {justSent && (
-            <p className="text-[11px] font-game font-bold mt-2" style={{ color: '#58cc02' }}>Friend request sent!</p>
+          {note && (
+            <p className="text-[11px] font-game font-bold mt-2" style={{ color: note.ok ? '#58cc02' : '#ff4b4b' }}>{note.text}</p>
+          )}
+          {friends.outgoing.length > 0 && (
+            <p className="text-[11px] font-game mt-2" style={{ color: '#7a8ba8' }}>
+              Waiting on: {friends.outgoing.map(f => `@${f.username}`).join(', ')}
+            </p>
           )}
         </div>
 
         <div className="flex flex-col gap-2">
+          {rankedFriends.length === 0 && (
+            <p className="text-xs font-game text-center py-4" style={{ color: '#7a8ba8' }}>
+              No friends yet. Add someone by username, or tap a player on the map.
+            </p>
+          )}
           {rankedFriends.map((f, i) => (
-            <FriendRow key={f.name} friend={f} rank={i + 1} onOpen={() => setOpenFriend(f)}/>
+            <FriendRow key={f.username} friend={f} rank={i + 1} onOpen={() => setOpenName(f.username)}/>
           ))}
         </div>
       </div>
 
       {openFriend && (
-        <FriendProfile friend={openFriend} rank={openRank} onClose={() => setOpenFriend(null)}/>
+        <FriendProfile friend={openFriend} rank={openRank} onClose={() => setOpenName(null)} onChallenge={onChallenge}/>
       )}
     </div>
   )
@@ -500,18 +525,6 @@ function RankBadge({ rank }: { rank: number }) {
   )
   return (
     <div className="w-7 h-7 flex items-center justify-center font-game font-bold text-xs" style={{ color: '#7a8ba8' }}>{rank}</div>
-  )
-}
-
-function LeaderboardView() {
-  const sorted = [...LEADERBOARD].sort((a, b) => b.score - a.score).map((e, i) => ({ ...e, rank: i + 1 }))
-  const me = sorted.find(e => e.isMe)
-
-  return (
-    <div className="px-4 flex flex-col gap-6">
-      <LocalLeaderboard sorted={sorted} me={me}/>
-      <FriendsSection/>
-    </div>
   )
 }
 

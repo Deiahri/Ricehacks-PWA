@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { Equipped } from '../config/cosmetics'
 import { storage } from '../platform'
 import { angleDiff, type GeoFix } from './useLiveLocation'
 
 export interface RemotePlayer {
   id: string
   name: string
+  /** Set once the player has picked a username (their account on the server). */
+  username?: string | null
   shirt: string
+  equipped?: Equipped
   lat: number
   lng: number
   heading: number | null
@@ -27,8 +31,8 @@ const KEEPALIVE_MS = 20_000 // re-send while standing still; the server hides pl
 
 const randomId = () => crypto.randomUUID?.() ?? `p-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
 
-// Name, shirt and userId (who stored workouts belong to) stick across launches;
-// the connection id is per tab so two tabs show up as two players.
+// Name, shirt and userId stick across launches; the connection id is per tab so two tabs show up as two players.
+// userId is this device's secret: the server maps it to an account (username, BP, friends) and never shares it.
 function makeIdentity() {
   let name = storage.get('presence.name')
   if (!name) {

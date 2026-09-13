@@ -161,7 +161,7 @@ export default function LiveMap({ me, position, heading, others, onSelect }: Pro
               pointerEvents: 'none',
               filter: 'drop-shadow(1px 0 0 #ffd700) drop-shadow(-1px 0 0 #ffd700) drop-shadow(0 1px 0 #ffd700) drop-shadow(0 -1px 0 #ffd700) drop-shadow(0 0 4px rgba(255,215,0,0.6))',
             }}>
-              <CharacterSprite size="md" animate {...me.appearance} {...me.equipment} />
+              <CharacterSprite size="md" animate {...me.appearance} equipped={me.equipment} />
             </div>
           </MapMarker>
         </>
@@ -208,7 +208,7 @@ function OtherPlayer({ map, player, me, flip, onSelect }: {
             {player.name}
           </div>
           <div style={{ lineHeight: 0 }}>
-            <CharacterSprite size="md" flip={flip} {...me.appearance} shirt={player.shirt} />
+            <CharacterSprite size="md" flip={flip} {...me.appearance} shirt={player.shirt} equipped={player.equipped} />
           </div>
         </button>
       </MapMarker>

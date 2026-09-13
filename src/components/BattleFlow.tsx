@@ -3,8 +3,12 @@ import CharacterSprite from './CharacterSprite'
 import CameraFeed from './CameraFeed'
 import type { Player, BattleStep } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
+import { unlockAudio } from '../audio/sfx'
 import type { CameraPhase } from '../camera/usePoseCamera'
+import type { CoachRep } from '../coach/triggers'
+import { useCoach, type CoachApi, type CoachState } from '../coach/useCoach'
 import type { ChallengeHandle, Resolution } from '../game/useChallenge'
+import { useCombo } from '../game/useCombo'
 import { useRepSession } from '../game/useRepSession'
 import { avgForm, formatClock, formatDuration, repQuality, totalScore, type RepQuality } from '../game/scoring'
 import {
@@ -35,6 +39,11 @@ const Q_COLOR: Record<RepQuality, string> = { red: '#ff4b4b', yellow: '#ffd700',
 
 const exerciseOption = (id: ExerciseName) => EXERCISE_OPTIONS.find(o => o.id === id)!
 const describe = (c: SessionConfig) => `${exerciseOption(c.exercise).label} · ${formatDuration(c.durationS)}`
+
+/** What the voice coach gets per rep. */
+const coachReps = (all: RepResult[]): CoachRep[] => all.map(r => ({ score: r.score, cue: r.cues[0] }))
+const oppStats = (name: string, opp: { reps: number; score: number }) =>
+  ` opponent=${JSON.stringify(name)} opponent_reps=${opp.reps} opponent_score=${opp.score}pts`
 
 function StepIndicator({ steps, current }: { steps: string[]; current: number }) {
   return (
@@ -121,7 +130,7 @@ function PreBattleAnim({ me, opponent, onNext }: { me: Player; opponent: Player;
         {/* Opponent — top-left quadrant, biased left so its left edge sits on the text's left bound */}
         <div className="anim-slide-left absolute flex flex-col items-start" style={{ top: 'calc(4% - 10px)', left: 'calc(10% - 20px)' }}>
           <div style={{ marginLeft: -10 }}>
-            <CharacterSprite size="lg" svgStyle={FIGHTER_SVG} {...opponent.appearance} {...opponent.equipment}/>
+            <CharacterSprite size="lg" svgStyle={FIGHTER_SVG} {...opponent.appearance} equipped={opponent.equipment}/>
           </div>
           <div className="text-left">
             <div className="font-game font-black" style={{ color: '#1a2b4a', fontSize: NAME_SIZE }}>{opponent.name}</div>
@@ -132,7 +141,7 @@ function PreBattleAnim({ me, opponent, onNext }: { me: Player; opponent: Player;
         {/* Me — bottom-right quadrant, biased right so its right edge sits on the text's right bound */}
         <div className="anim-slide-right absolute flex flex-col items-end" style={{ bottom: 'calc(6% - 10px)', right: 'calc(10% - 20px)' }}>
           <div style={{ marginRight: -10 }}>
-            <CharacterSprite size="lg" flip svgStyle={FIGHTER_SVG} {...me.appearance} {...me.equipment}/>
+            <CharacterSprite size="lg" flip svgStyle={FIGHTER_SVG} {...me.appearance} equipped={me.equipment}/>
           </div>
           <div className="text-right">
             <div className="font-game font-black" style={{ color: '#1a2b4a', fontSize: NAME_SIZE }}>{me.name}</div>
@@ -158,7 +167,7 @@ function PreBattleAnim({ me, opponent, onNext }: { me: Player; opponent: Player;
         <button
           className="w-full py-4 rounded-2xl font-game font-black text-white text-lg active:scale-95"
           style={{ background: 'linear-gradient(135deg,#ff9600,#e74c3c)', boxShadow: '0 8px 32px rgba(255,150,0,0.5)' }}
-          onClick={onNext}
+          onClick={() => { unlockAudio(); onNext() }}
         >
           Vote on the Challenge →
         </button>
@@ -203,11 +212,13 @@ function RevealPanel({ resolution, oppName }: { resolution: Resolution; oppName:
   )
 }
 
-function SessionPicker({ isSolo, opponent, challenge, onStart, onExit }: {
+function SessionPicker({ isSolo, opponent, challenge, onStart, onGesture, onExit }: {
   isSolo: boolean
   opponent: Player | null
   challenge: ChallengeHandle
   onStart: (config: SessionConfig) => void
+  /** Called inside the Start / Lock In tap, the moment iOS allows audio (sounds, coach) to start. */
+  onGesture: (config: SessionConfig) => void
   onExit: () => void
 }) {
   const [exercise, setExercise] = useState<ExerciseName | null>(null)
@@ -226,8 +237,12 @@ function SessionPicker({ isSolo, opponent, challenge, onStart, onExit }: {
   }, [resolution])
 
   const submit = () => {
-    if (resolution) return onStart(resolution.config)
+    if (resolution) {
+      onGesture(resolution.config)
+      return onStart(resolution.config)
+    }
     if (!exercise || locked) return
+    onGesture({ exercise, durationS })
     if (isSolo) onStart({ exercise, durationS })
     else challenge.pick({ exercise, durationS })
   }
@@ -289,7 +304,7 @@ function SessionPicker({ isSolo, opponent, challenge, onStart, onExit }: {
             })}
 
             <div className="font-game font-black text-sm mt-3" style={{ color: '#1a2b4a' }}>Time limit</div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {DURATIONS.map(d => {
                 const isSelected = durationS === d
                 return (
@@ -297,7 +312,7 @@ function SessionPicker({ isSolo, opponent, challenge, onStart, onExit }: {
                     key={d}
                     disabled={locked}
                     onClick={() => setDurationS(d)}
-                    className="py-3 rounded-2xl font-game font-black text-base transition-all active:scale-95"
+                    className="py-3 rounded-2xl font-game font-black text-sm transition-all active:scale-95"
                     style={{
                       background: isSelected ? '#4a90e2' : '#f5f7fb',
                       color: isSelected ? '#fff' : '#1a2b4a',
@@ -386,11 +401,49 @@ const SAVE_TEXT: Record<Exclude<SaveState, 'idle'>, [string, string]> = {
   offline: ['Not saved: you are offline', '#ff4b4b'],
 }
 
-function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onExit }: {
+// Mic button for the voice coach: tap to mute / unmute. The ring shows whether it's connected.
+const COACH_LOOK: Record<Exclude<CoachState, 'off'>, { ring: string; label: string }> = {
+  speaking:   { ring: '#58cc02', label: 'Coach talking' },
+  listening:  { ring: '#58cc02', label: 'Coach listening' },
+  connecting: { ring: '#f59e0b', label: 'Coach connecting' },
+  idle:       { ring: '#c8d0e0', label: 'Coach' },
+  muted:      { ring: '#c8d0e0', label: 'Coach muted' },
+  offline:    { ring: '#ff4b4b', label: 'Coach offline' },
+}
+
+function CoachButton({ coach }: { coach: CoachApi }) {
+  if (coach.state === 'off') return null
+  const look = COACH_LOOK[coach.state]
+  return (
+    <div className="absolute bottom-3 right-3 z-10 flex flex-col items-end gap-1">
+      {coach.state === 'offline' && (
+        <span className="px-2 py-0.5 rounded-lg font-game font-bold text-[10px]" style={{ background: '#fff0f0', color: '#ff4b4b', border: '1.5px solid #fecaca' }}>
+          Coach offline
+        </span>
+      )}
+      <button
+        onClick={coach.toggleMute}
+        aria-label={`${look.label}. Tap to ${coach.state === 'muted' ? 'unmute' : 'mute'}.`}
+        className={`w-11 h-11 rounded-full flex items-center justify-center transition-transform active:scale-90 ${coach.state === 'connecting' ? 'animate-pulse' : ''}`}
+        style={{
+          background: '#ffffffee',
+          border: `2.5px solid ${look.ring}`,
+          boxShadow: coach.state === 'speaking' ? `0 0 0 5px ${look.ring}55` : 'none',
+          transition: 'box-shadow 0.15s',
+        }}
+      >
+        <span className="text-lg leading-none">{coach.state === 'muted' ? '🔇' : '🎙️'}</span>
+      </button>
+    </div>
+  )
+}
+
+function WorkoutRecording({ isSolo, config, opponentName, challenge, coach, onNext, onExit }: {
   isSolo: boolean
   config: SessionConfig
   opponentName: string
   challenge: ChallengeHandle
+  coach: CoachApi
   onNext: () => void
   onExit: () => void
 }) {
@@ -398,9 +451,22 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
   const { rep: sendRep, ready: sendReady, final: sendFinal } = challenge
   const { send, subscribe } = useSocket()
 
+  // Read by the rep callback, which exists before these are known.
+  const countStartRef = useRef<number | null>(null)
+  const comboRep = useRef<() => void>(() => {})
+  const oppRef = useRef(cs.opp)
+  oppRef.current = cs.opp
+  const coachRef = useRef(coach)
+  coachRef.current = coach
+  const oppExtra = useCallback(() => (isSolo ? '' : oppStats(opponentName, oppRef.current)), [isSolo, opponentName])
+
   const onRep = useCallback((rep: RepResult, all: RepResult[]) => {
-    if (!isSolo) sendRep(all.length, totalScore(all.map(r => r.score)), repQuality(rep.score))
-  }, [isSolo, sendRep])
+    const score = totalScore(all.map(r => r.score))
+    if (!isSolo) sendRep(all.length, score, repQuality(rep.score))
+    comboRep.current()
+    const start = countStartRef.current
+    if (start !== null) coachRef.current.onRep(coachReps(all), performance.now() - start, config.durationS, score, oppExtra())
+  }, [isSolo, sendRep, config.durationS, oppExtra])
   const session = useRepSession(config.exercise, onRep)
   const { arm } = session
 
@@ -417,6 +483,7 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
   const goAt = isSolo ? soloGoAt : cs.goAt
   const countStart = goAt === null ? null : goAt + (isSolo ? COUNTDOWN_MS : cs.countdownMs)
   const end = countStart === null ? null : countStart + config.durationS * 1000
+  countStartRef.current = countStart
   useEffect(() => { if (countStart !== null && end !== null) arm(countStart, end) }, [countStart, end, arm])
 
   const [done, setDone] = useState(false)
@@ -428,13 +495,20 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
   else if (now < end) phase = 'counting'
   else phase = 'done'
 
+  // Streak sounds while counting (src/config/sounds.ts).
+  const combo = useCombo(phase === 'counting')
+  comboRep.current = combo.onRep
+
   // Time's up, or the server already settled the challenge (the opponent left).
   const timeUp = phase === 'done' || (!isSolo && cs.phase === 'result')
   useEffect(() => { if (timeUp && !done) setDone(true) }, [timeUp, done])
 
   const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [earned, setEarned] = useState<number | null>(null)
   useEffect(() => subscribe(msg => {
-    if (msg.type === 'saved') setSaveState(msg.ok ? 'saved' : msg.reason === 'no-db' ? 'no-db' : 'failed')
+    if (msg.type !== 'saved') return
+    setSaveState(msg.ok ? 'saved' : msg.reason === 'no-db' ? 'no-db' : 'failed')
+    if (typeof msg.bpAwarded === 'number') setEarned(msg.bpAwarded)
   }), [subscribe])
 
   const [finalReps, setFinalReps] = useState<RepResult[] | null>(null)
@@ -449,9 +523,10 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
       const repScores = reps.map(r => r.score)
       if (!isSolo) sendFinal(repScores)
       else setSaveState(send({ type: 'solo_result', exercise: config.exercise, durationS: config.durationS, repScores }) ? 'saving' : 'offline')
+      coachRef.current.finish(coachReps(reps), config.durationS, totalScore(repScores), oppExtra())
     }, 400)
     return () => clearTimeout(t)
-  }, [done, isSolo, sendFinal, send, config.exercise, config.durationS])
+  }, [done, isSolo, sendFinal, send, config.exercise, config.durationS, oppExtra])
 
   const reps = finalReps ?? session.reps
   const scores = reps.map(r => r.score)
@@ -461,7 +536,7 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
   const remainingS = phase === 'counting' ? (end! - now) / 1000 : phase === 'done' ? 0 : config.durationS
   const countdownN = phase === 'countdown' ? Math.min(10, Math.max(1, Math.ceil((countStart! - now) / 1000))) : 0
   const showGo = phase === 'counting' && now - countStart! < 900
-  const coach = session.status || session.notice || (last ? last.cues[0] : '')
+  const cue = session.status || session.notice || (last ? last.cues[0] : '')
   const opponentLeft = !isSolo && cs.result?.forfeit === true && cs.result.winnerId === cs.result.you.id
 
   const exit = () => {
@@ -557,11 +632,25 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
           </>
         )}
 
-        {phase === 'counting' && coach && (
-          <div className="absolute left-3 right-16 bottom-3 px-3 py-2 rounded-xl pointer-events-none" style={{ background: '#ffffffee', border: '2px solid #c8d0e0' }}>
-            <p className="font-game font-bold text-xs" style={{ color: session.status ? '#f59e0b' : '#1a2b4a' }}>{coach}</p>
+        {phase === 'counting' && combo.count > 0 && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-none">
+            <div
+              key={combo.count}
+              className="anim-slam px-3 py-1.5 rounded-xl font-game font-black text-lg whitespace-nowrap"
+              style={{ background: '#fff8ec', border: '2px solid #ffd093', color: '#ff9600' }}
+            >
+              🔥 ×{combo.count}
+            </div>
           </div>
         )}
+
+        {phase === 'counting' && cue && (
+          <div className="absolute left-3 right-16 bottom-3 px-3 py-2 rounded-xl pointer-events-none" style={{ background: '#ffffffee', border: '2px solid #c8d0e0' }}>
+            <p className="font-game font-bold text-xs" style={{ color: session.status ? '#f59e0b' : '#1a2b4a' }}>{cue}</p>
+          </div>
+        )}
+
+        <CoachButton coach={coach}/>
       </div>
 
       {/* Bottom */}
@@ -586,6 +675,11 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
             <div className="mt-3">
               <QualityStrip scores={scores} reps={reps.length} height={12}/>
             </div>
+            {isSolo && earned !== null && earned > 0 && (
+              <div className="anim-pop-in mt-3 text-center font-game font-black text-base" style={{ color: '#b45309' }}>
+                ◆ +{earned} BP earned
+              </div>
+            )}
             {isSolo && saveState !== 'idle' && (
               <div className="mt-2 text-center font-game font-bold text-xs" style={{ color: SAVE_TEXT[saveState][1] }}>
                 {SAVE_TEXT[saveState][0]}
@@ -641,7 +735,7 @@ function Fighter({ player, flip, role }: { player: Player; flip?: boolean; role:
           ? { background: ACCENT_BG, border: `2.5px solid ${ACCENT}55` }
           : { background: ACCENT_BG, border: `2.5px solid ${ACCENT}`, boxShadow: `0 8px 32px ${ACCENT}33` }}
       >
-        <CharacterSprite size="md" flip={flip} {...player.appearance} {...player.equipment}/>
+        <CharacterSprite size="md" flip={flip} {...player.appearance} equipped={player.equipment}/>
       </div>
       {role === 'winner' && (
         <div className="font-game font-black text-sm px-3 py-1 rounded-full" style={{ background: '#ffd700', color: '#7a4f00' }}>👑 WINNER</div>
@@ -756,6 +850,7 @@ function PostBattleResult({ me, opponent, result, onExit }: { me: Player; oppone
               ['Your score', `${result.you.score} pts`, '#f59e0b'],
               [`${opponent.name}'s score`, `${result.opponent.score} pts`, '#7a8ba8'],
               ['Your avg form', `${avgForm(result.you.repScores)}%`, '#58cc02'],
+              ...(result.you.bpAwarded !== undefined ? [['Battle points earned', `◆ +${result.you.bpAwarded} BP`, '#b45309']] : []),
             ] as [string, string, string][]).map(([label, val, color]) => (
               <div key={label} className="flex items-center justify-between gap-3">
                 <span className="font-game text-sm truncate" style={{ color: '#7a8ba8' }}>{label}</span>
@@ -783,22 +878,32 @@ function PostBattleResult({ me, opponent, result, onExit }: { me: Player; oppone
 
 export default function BattleFlow({ step, setStep, opponent, me, isSolo, challenge, onExit }: Props) {
   const [config, setConfig] = useState<SessionConfig | null>(null)
+  const coach = useCoach({ username: me.name, isSolo })
+  const { prime: primeCoach, start: startCoach } = coach
+  const opponentName = opponent?.name
   const startRecording = useCallback((c: SessionConfig) => {
     setConfig(c)
+    primeCoach(c, isSolo ? undefined : opponentName)
     setStep('recording')
-  }, [setStep])
+  }, [setStep, primeCoach, isSolo, opponentName])
+  const onGesture = useCallback((c: SessionConfig) => {
+    unlockAudio()
+    startCoach(c)
+  }, [startCoach])
   const result = challenge.state.result
 
   return (
     <div className="absolute inset-0 overflow-hidden">
+      {coach.element}
       {step === 'pre-anim'  && opponent && <PreBattleAnim me={me} opponent={opponent} onNext={() => setStep('pick')}/>}
-      {step === 'pick'      && <SessionPicker isSolo={isSolo} opponent={opponent} challenge={challenge} onStart={startRecording} onExit={onExit}/>}
+      {step === 'pick'      && <SessionPicker isSolo={isSolo} opponent={opponent} challenge={challenge} onStart={startRecording} onGesture={onGesture} onExit={onExit}/>}
       {step === 'recording' && config && (
         <WorkoutRecording
           isSolo={isSolo}
           config={config}
           opponentName={opponent?.name ?? 'Opponent'}
           challenge={challenge}
+          coach={coach}
           onNext={isSolo ? onExit : () => setStep('result')}
           onExit={onExit}
         />

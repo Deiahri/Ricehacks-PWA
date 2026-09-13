@@ -5,7 +5,7 @@ import type { Player } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
 import LiveMap from '../live/LiveMap'
 import { useLive } from '../live/LiveProvider'
-import { IDENTITY } from '../live/usePresence'
+import { sameName, useProfile } from '../live/ProfileProvider'
 import type { RemoteBrief } from '../game/types'
 
 interface Props {
@@ -13,19 +13,57 @@ interface Props {
   onStartBattle: (player: Player) => void
 }
 
-// Live players only have a name/shirt/position; give them placeholder stats so the popover + battle flow work.
-export function toPlayer(p: RemoteBrief, me: Player): Player {
+// Live players only have a name/shirt/gear/position; give them placeholder stats so the popover + battle flow work.
+export function toPlayer(p: RemoteBrief & { username?: string | null }, me: Player): Player {
   let h = 0
   for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) | 0
   return {
     id: 1000 + (Math.abs(h) % 1_000_000),
     remoteId: p.id,
     name: p.name,
+    username: p.username ?? null,
     level: 1, power: 50, speed: 50, evasion: 50, bp: 100, wins: 0, losses: 0,
     x: 50, y: 50,
     appearance: { ...me.appearance, shirt: p.shirt },
-    equipment: {},
+    equipment: p.equipped ?? {},
   }
+}
+
+/** Add Friend on the map popover, aware of who's already a friend or has a request pending. */
+function AddFriendButton({ username }: { username?: string | null }) {
+  const { profile, friends, sendRequest } = useProfile()
+  const [state, setState] = useState<'idle' | 'busy' | 'error'>('idle')
+  const has = (list: { username: string }[]) => list.some(f => sameName(f.username, username))
+  const relation =
+    !username || !profile?.username || sameName(username, profile.username) ? 'unavailable'
+    : has(friends.friends) ? 'friends'
+    : has(friends.outgoing) ? 'requested'
+    : has(friends.incoming) ? 'incoming'
+    : 'add'
+  const canTap = (relation === 'add' || relation === 'incoming') && state !== 'busy'
+  const label =
+    state === 'busy' ? 'Sending…'
+    : state === 'error' ? 'Try again'
+    : { unavailable: 'Add Friend', friends: 'Friends ✓', requested: 'Requested', incoming: 'Accept Friend', add: 'Add Friend' }[relation]
+
+  const tap = () => {
+    if (!canTap || !username) return
+    setState('busy')
+    sendRequest(username).then(() => setState('idle'), () => setState('error'))
+  }
+
+  return (
+    <button
+      disabled={!canTap}
+      onClick={tap}
+      className="flex-1 py-3 rounded-2xl text-sm font-game font-bold transition-transform active:scale-95"
+      style={canTap
+        ? { background: '#f0fff0', color: '#3d9100', border: '2.5px solid #58cc02' }
+        : { background: '#f5f7fb', color: '#7a8ba8', border: '2.5px solid #c8d0e0' }}
+    >
+      {label}
+    </button>
+  )
 }
 
 // --- Streak flame icon (imported Figma design) ---
@@ -107,7 +145,7 @@ function PlayerPopover({ player, onClose, onBattle }: PopoverProps) {
             className="w-[64px] h-[64px] rounded-2xl flex items-center justify-center"
             style={{ background: `${color}22`, border: `2px solid ${color}44` }}
           >
-            <CharacterSprite size="sm" {...player.appearance} {...player.equipment}/>
+            <CharacterSprite size="sm" {...player.appearance} equipped={player.equipment}/>
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -137,12 +175,7 @@ function PlayerPopover({ player, onClose, onBattle }: PopoverProps) {
 
         {/* Actions */}
         <div className="flex gap-3 p-4 pt-2">
-          <button
-            className="flex-1 py-3 rounded-2xl text-sm font-game font-bold"
-            style={{ background: '#f5f7fb', color: '#7a8ba8', border: '2.5px solid #c8d0e0' }}
-          >
-            Add Friend
-          </button>
+          <AddFriendButton username={player.username}/>
           <button
             className="flex-1 py-3 rounded-2xl text-sm font-game font-black text-white transition-transform active:scale-95"
             style={{
@@ -182,7 +215,7 @@ function StreakStrip({ me }: { me: Player }) {
         }}
       >
         <div style={{ transform: 'scale(1.25)', transformOrigin: 'top center', marginTop: 6 }}>
-          <CharacterSprite size="sm" {...me.appearance} {...me.equipment}/>
+          <CharacterSprite size="sm" {...me.appearance} equipped={me.equipment}/>
         </div>
       </div>
 
@@ -316,7 +349,7 @@ function ProfileChip({ me }: { me: Player }) {
         className="w-9 h-9 rounded-full flex items-center justify-center"
         style={{ background: ACCENT_BG, border: `2.5px solid ${color}` }}
       >
-        <CharacterSprite size="xs" {...me.appearance} {...me.equipment}/>
+        <CharacterSprite size="xs" {...me.appearance} equipped={me.equipment}/>
       </div>
       <div className="flex flex-col">
         <span className="font-game font-black text-[13px] leading-tight" style={{ color: '#1a2b4a' }}>{me.name}</span>
@@ -331,7 +364,6 @@ function ProfileChip({ me }: { me: Player }) {
 export default function MapScreen({ me, onStartBattle }: Props) {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const { location, connected, others } = useLive()
-  const meLive: Player = { ...me, name: IDENTITY.name, appearance: { ...me.appearance, shirt: IDENTITY.shirt } }
 
   const statusText =
     location.status !== 'active' ? 'Location off'
@@ -342,7 +374,7 @@ export default function MapScreen({ me, onStartBattle }: Props) {
   return (
     <div className="absolute inset-0 overflow-hidden">
       <LiveMap
-        me={meLive}
+        me={me}
         position={location.position}
         heading={location.heading}
         others={others}
@@ -360,7 +392,7 @@ export default function MapScreen({ me, onStartBattle }: Props) {
           >
             <span style={{ color: statusColor }}>●</span>
             {statusText}
-            <span style={{ color: '#7a8ba8' }}>· {IDENTITY.name}{location.heading !== null ? ` · ${location.heading}°` : ''}</span>
+            <span style={{ color: '#7a8ba8' }}>· {me.name}{location.heading !== null ? ` · ${location.heading}°` : ''}</span>
           </div>
           {/* iOS compass permission gets its own tap, after Location is granted */}
           {location.status === 'active' && location.compass === 'prompt' && (
