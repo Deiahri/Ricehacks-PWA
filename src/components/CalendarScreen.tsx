@@ -3,7 +3,9 @@ import CharacterSprite from './CharacterSprite'
 import { ACCENT, ACCENT_BG } from '../App'
 import { skinColors } from '../config/appearance'
 import type { Equipped } from '../config/cosmetics'
+import { EXERCISE_OPTIONS } from '../game/types'
 import { ApiError } from '../live/api'
+import { useWorkoutHistory, type WorkoutEntry } from '../live/useWorkoutHistory'
 import { useProfile, type Friend } from '../live/ProfileProvider'
 
 type DayState = 'trained' | 'rest' | 'missed' | 'future'
@@ -125,6 +127,86 @@ function CalendarView() {
         ))}
       </div>
 
+    </div>
+  )
+}
+
+// ─── Recent workouts ──────────────────────────────────────────────
+const RESULT_PILL: Record<'win' | 'loss' | 'draw', { label: string; color: string }> = {
+  win:  { label: 'WIN',  color: '#58cc02' },
+  loss: { label: 'LOSS', color: '#ff4b4b' },
+  draw: { label: 'DRAW', color: '#9aaac4' },
+}
+
+const setLength = (s: number) => (s < 60 ? `${s}s` : `${s / 60}m`)
+
+function dayLabel(iso: string) {
+  const d = new Date(iso)
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const days = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function WorkoutRow({ w }: { w: WorkoutEntry }) {
+  const ex = EXERCISE_OPTIONS.find(o => o.id === w.exercise)
+  const pill = w.result && RESULT_PILL[w.result]
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-2xl" style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}>
+      <div className="flex flex-col items-center flex-shrink-0" style={{ width: 44 }}>
+        <span className="text-xl leading-none">{ex?.icon ?? '🏃'}</span>
+        <span className="text-[10px] font-game font-bold mt-1" style={{ color: '#7a8ba8' }}>{setLength(w.durationS)}</span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-game font-bold text-sm truncate" style={{ color: '#1a2b4a' }}>
+            {ex?.label ?? w.exercise} · {w.opponent ? `vs @${w.opponent.name}` : 'Solo'}
+          </span>
+          {pill && (
+            <span className="px-1.5 rounded-full text-[9px] font-game font-black text-white flex-shrink-0" style={{ background: pill.color }}>
+              {pill.label}
+            </span>
+          )}
+        </div>
+        <span className="text-[11px] font-game" style={{ color: '#7a8ba8' }}>
+          {dayLabel(w.createdAt)}
+          {w.opponent && w.opponent.score !== null && ` · ${w.score ?? 0}–${w.opponent.score}`}
+          {w.forfeit && ' · forfeit'}
+        </span>
+      </div>
+      <div className="text-right flex-shrink-0">
+        <div className="font-game font-black text-lg leading-tight" style={{ color: '#1a2b4a' }}>{w.score ?? '–'}</div>
+        <div className="text-[10px] font-game" style={{ color: '#7a8ba8' }}>
+          {w.reps ?? 0} reps
+          {w.bp > 0 && <span className="font-bold" style={{ color: '#f59e0b' }}> · +{w.bp} BP</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RecentWorkouts() {
+  const { items, failed } = useWorkoutHistory()
+  const note = (text: string) => (
+    <p className="text-xs font-game text-center py-4" style={{ color: '#7a8ba8' }}>{text}</p>
+  )
+  return (
+    <div className="px-4 mt-6">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-game font-black text-base" style={{ color: '#1a2b4a' }}>Recent Workouts</h3>
+        {items && items.length > 0 && (
+          <span className="text-[11px] font-game" style={{ color: '#7a8ba8' }}>Last {items.length}</span>
+        )}
+      </div>
+      {failed ? note("Couldn't load your workouts.")
+        : !items ? note('Loading…')
+        : items.length === 0 ? note("No workouts yet. Finish a set and it'll show up here.")
+        : (
+          <div className="flex flex-col gap-2">
+            {items.map(w => <WorkoutRow key={w.id} w={w}/>)}
+          </div>
+        )}
     </div>
   )
 }
@@ -554,6 +636,7 @@ export default function CalendarScreen() {
       </div>
       <div className="flex-1 overflow-y-auto pb-24">
         <CalendarView/>
+        <RecentWorkouts/>
       </div>
     </div>
   )
