@@ -7,7 +7,7 @@ import { useProfile } from '../live/ProfileProvider'
 // ─── Shop items (src/config/cosmetics.ts) ─────────────────────────
 type CardState = 'equipped' | 'owned' | 'buy' | 'poor' | 'offline'
 
-const SHOP_ERRORS: Record<string, string> = {
+export const SHOP_ERRORS: Record<string, string> = {
   'insufficient-bp': "You don't have enough BP for that yet.",
   owned: 'You already own that item.',
   'not-owned': "You don't own that item.",
@@ -61,8 +61,8 @@ function ShopItemCard({ item, index, cost, state, busy, onTap }: {
   )
 }
 
-/** The item shop, opened from the wooden sign on the Profile screen (a full-screen page over it). */
-export default function ShopScreen({ onClose }: { onClose: () => void }) {
+/** The item shop, opened from the wooden button on the Profile screen (a full-screen page over it). */
+export default function ShopScreen({ onClose, onOpenInventory }: { onClose: () => void; onOpenInventory?: () => void }) {
   const { profile, buy, equip } = useProfile()
   const [prices, setPrices] = useState<Record<string, number>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -117,9 +117,16 @@ export default function ShopScreen({ onClose }: { onClose: () => void }) {
           <h2 className="font-game font-black text-xl leading-tight" style={{ color: '#1a2b4a' }}>Item Shop</h2>
           <p className="text-[11px] font-game leading-tight" style={{ color: '#7a8ba8' }}>Earn BP from workouts and battles. Everyone sees what you wear.</p>
         </div>
-        <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-2xl flex-shrink-0" style={{ background: '#fffbeb', border: '2px solid #fde68a' }}>
-          <span style={{ color: '#f59e0b', fontSize: 14 }}>◆</span>
-          <span className="font-game font-black text-sm" style={{ color: '#b45309' }}>{profile?.bp ?? '—'}</span>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-2xl" style={{ background: '#fffbeb', border: '2px solid #fde68a' }}>
+            <span style={{ color: '#f59e0b', fontSize: 14 }}>◆</span>
+            <span className="font-game font-black text-sm" style={{ color: '#b45309' }}>{profile?.bp ?? '—'}</span>
+          </div>
+          {onOpenInventory && (
+            <button onClick={onOpenInventory} className="font-game font-black text-[11px] active:scale-95" style={{ color: ACCENT }}>
+              Inventory →
+            </button>
+          )}
         </div>
       </div>
 

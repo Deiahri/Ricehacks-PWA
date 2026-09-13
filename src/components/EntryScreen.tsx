@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type AnimationEvent } from 'react'
 
 export const SLOGAN = 'Your Best Rep Is Your Next Rep'
+
+// The app's "Great!" green (Q_COLOR.green) and its darker shade.
+const GREEN = '#58cc02'
+const GREEN_DARK = '#3d9100'
+const LOGO_URL = `${import.meta.env.BASE_URL}logo.png`
 
 function GoogleG() {
   return (
@@ -23,25 +28,35 @@ export interface EntryAuth {
 }
 
 /**
- * Shown on every launch: the NR logo and slogan; tap anywhere to continue. Signed out (when sign-in is required),
- * the tap reveals "Continue with Google" instead.
+ * Shown on every launch: the NR logo and slogan; tap anywhere to continue, and the screen wipes up to reveal the game.
+ * Signed out (when sign-in is required), the tap reveals "Continue with Google" instead.
  */
 export default function EntryScreen({ onContinue, auth }: { onContinue: () => void; auth?: EntryAuth }) {
   const [tapped, setTapped] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const needsSignIn = !!auth && auth.ready && !auth.signedIn
   const showSignIn = tapped && needsSignIn
 
+  // Play the wipe; onContinue runs when it finishes (onAnimationEnd below), so the game is uncovered, not swapped in.
+  const leave = useCallback(() => setLeaving(true), [])
+  const continued = useRef(false)
+  const finish = (e: AnimationEvent) => {
+    if (e.target !== e.currentTarget || continued.current) return
+    continued.current = true
+    onContinue()
+  }
+
   const tap = () => {
-    if (showSignIn) return
+    if (showSignIn || leaving) return
     if (auth && !auth.ready) return setTapped(true) // continue once Clerk has loaded (below)
     if (needsSignIn) return setTapped(true)
-    onContinue()
+    leave()
   }
   // Tapped while Clerk was still loading: go on as soon as it knows we're signed in.
   const signedInAfterTap = tapped && !!auth?.ready && auth.signedIn
-  useEffect(() => { if (signedInAfterTap) onContinue() }, [signedInAfterTap, onContinue])
+  useEffect(() => { if (signedInAfterTap) leave() }, [signedInAfterTap, leave])
 
   const google = async () => {
     if (busy || !auth) return
@@ -57,17 +72,22 @@ export default function EntryScreen({ onContinue, auth }: { onContinue: () => vo
 
   return (
     <div
-      className="absolute inset-0 z-[90] flex flex-col items-center select-none"
-      style={{ background: 'linear-gradient(170deg, #ffffff 0%, #eff5ff 55%, #dcebff 100%)', cursor: showSignIn ? 'default' : 'pointer' }}
+      className={`absolute inset-0 z-[90] flex flex-col items-center select-none ${leaving ? 'anim-entry-wipe' : ''}`}
+      style={{ background: 'linear-gradient(170deg, #ffffff 0%, #f0fff0 50%, #d4f5b8 100%)', cursor: showSignIn || leaving ? 'default' : 'pointer' }}
       onClick={tap}
+      onAnimationEnd={leaving ? finish : undefined}
     >
       <div className="flex-1 flex flex-col items-center justify-center px-8 text-center" style={{ paddingTop: 'var(--top-gap)' }}>
-        <img
-          src={`${import.meta.env.BASE_URL}logo.png`}
-          alt="NextRep"
-          draggable={false}
+        {/* The logo PNG is black-on-transparent; use it as a mask so it takes the brand green. */}
+        <div
+          role="img"
+          aria-label="NextRep"
           className="anim-fade-up"
-          style={{ width: 176, maxWidth: '55%', height: 'auto' }}
+          style={{
+            width: 176, maxWidth: '55%', aspectRatio: '463 / 408', background: GREEN,
+            WebkitMask: `url(${LOGO_URL}) center / contain no-repeat`,
+            mask: `url(${LOGO_URL}) center / contain no-repeat`,
+          }}
         />
         <p className="font-game font-black text-2xl leading-tight mt-6 anim-fade-up" style={{ color: '#1a2b4a', maxWidth: 280 }}>
           {SLOGAN}
@@ -91,11 +111,18 @@ export default function EntryScreen({ onContinue, auth }: { onContinue: () => vo
               : <p className="font-game text-xs text-center" style={{ color: '#7a8ba8' }}>Sign In To Keep Your Reps, Friends And BP</p>}
           </div>
         ) : (
-          <p className="font-game font-black text-sm tracking-widest uppercase animate-pulse" style={{ color: '#4a90e2' }}>
-            {tapped ? 'Loading…' : 'Tap To Continue'}
+          <p className="font-game font-black text-sm tracking-widest uppercase animate-pulse" style={{ color: GREEN_DARK }}>
+            {tapped || leaving ? 'Loading…' : 'Tap To Continue'}
           </p>
         )}
       </div>
+
+      {/* Green curtain hem hanging just below the screen (clipped at rest); it trails the wipe up. */}
+      <div
+        aria-hidden="true"
+        className="absolute left-0 right-0 top-full"
+        style={{ height: 36, background: `linear-gradient(${GREEN}, ${GREEN_DARK})`, borderRadius: '0 0 50% 50% / 0 0 100% 100%' }}
+      />
     </div>
   )
 }

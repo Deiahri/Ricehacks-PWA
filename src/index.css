@@ -164,6 +164,10 @@ html, body, #root {
 @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .anim-slide-in-right { animation: slideInRight 0.3s cubic-bezier(.22,1,.36,1); }
 
+/* The entry screen wipes up off the game; the extra 36px carries its green hem (EntryScreen.tsx) out too. */
+@keyframes entryWipeUp { from { transform: translateY(0); } to { transform: translateY(calc(-100% - 36px)); } }
+.anim-entry-wipe { animation: entryWipeUp 0.6s cubic-bezier(.65,0,.35,1) forwards; pointer-events: none; }
+
 /* A locked card's "not yet" wiggle. */
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
@@ -174,9 +178,30 @@ html, body, #root {
 }
 .anim-shake { animation: shake 0.4s ease; }
 
+/* The Shop button's chevron leans toward "tap me". */
+@keyframes nudgeX {
+  0%, 60%, 100% { transform: translateX(0); }
+  30% { transform: translateX(3px); }
+}
+.anim-nudge-x { animation: nudgeX 1.6s ease-in-out infinite; }
+
+/* The Profile's wooden Shop button (ShopSign.tsx): plank, outline and bevel; the bevel flips while pressed. */
+.wood-btn {
+  border-radius: 16px;
+  background: linear-gradient(180deg, #c98f53 0%, #ab733d 55%, #8a5a2b 100%);
+  border: 3px solid #5e3a18;
+  box-shadow: inset 0 3px 0 rgba(255,255,255,0.22), inset 0 -6px 0 rgba(0,0,0,0.16), 0 6px 12px rgba(90,58,26,0.25);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.wood-btn:active {
+  transform: scale(0.97);
+  box-shadow: inset 0 4px 6px rgba(0,0,0,0.25), 0 2px 5px rgba(90,58,26,0.2);
+}
+
 /* Still finish (so animationend fires and the old page unmounts), just instantly. */
 @media (prefers-reduced-motion: reduce) {
-  .tab-in-from-right, .tab-in-from-left, .tab-out-to-left, .tab-out-to-right, .anim-slide-in-right, .anim-shake {
+  .tab-in-from-right, .tab-in-from-left, .tab-out-to-left, .tab-out-to-right, .anim-slide-in-right, .anim-shake, .anim-entry-wipe {
     animation-duration: 1ms;
   }
+  .anim-nudge-x { animation: none; }
 }

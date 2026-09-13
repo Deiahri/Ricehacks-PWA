@@ -2,6 +2,8 @@ import { useState } from 'react'
 import svgPaths from '../imports/GameAppDesignOverview/svg-8d6d6pxw63'
 import AvatarEditor from './AvatarEditor'
 import CharacterSprite from './CharacterSprite'
+import InventoryButton from './InventoryButton'
+import InventoryScreen from './InventoryScreen'
 import ShopScreen from './ShopScreen'
 import ShopSign from './ShopSign'
 import { ShieldIcon } from './UnverifiedTag'
@@ -59,7 +61,7 @@ export default function ProfileScreen({ me }: Props) {
   const { profile } = useProfile()
   const [renaming, setRenaming] = useState(false)
   const [editingLook, setEditingLook] = useState(false)
-  const [shopOpen, setShopOpen] = useState(false)
+  const [open, setOpen] = useState<'shop' | 'inventory' | null>(null)
   const [verifying, setVerifying] = useState(false)
   const { board } = useGlobalLeaderboard()
   const color   = ACCENT
@@ -175,12 +177,10 @@ export default function ProfileScreen({ me }: Props) {
         </div>
       </div>
 
-      {/* ── Shop entrance: a wooden sign ── */}
-      <div className="relative w-full px-5 pt-6 pb-6 flex flex-col items-center gap-2">
-        <ShopSign onClick={() => setShopOpen(true)}/>
-        <p className="font-game text-xs text-center" style={{ color: '#7a8ba8' }}>
-          Gear up with BP from workouts and battles. Everyone sees what you wear.
-        </p>
+      {/* ── Shop (wooden button) and Inventory, a fixed 16px under the hero's divider ── */}
+      <div className="w-full px-5 pt-4 pb-6 flex flex-col gap-3">
+        <ShopSign onClick={() => setOpen('shop')}/>
+        <InventoryButton owned={profile?.owned ?? []} equipped={profile?.equipped ?? {}} onClick={() => setOpen('inventory')}/>
       </div>
 
       {canSignOut() && (
@@ -194,7 +194,10 @@ export default function ProfileScreen({ me }: Props) {
 
       <div style={{ height: 80 }}/>
     </div>
-      {shopOpen && <ShopScreen onClose={() => setShopOpen(false)}/>}
+      {open === 'shop' && <ShopScreen onClose={() => setOpen(null)} onOpenInventory={() => setOpen('inventory')}/>}
+      {open === 'inventory' && (
+        <InventoryScreen appearance={me.appearance} onClose={() => setOpen(null)} onOpenShop={() => setOpen('shop')}/>
+      )}
       {renaming && <UsernamePicker mode="rename" onClose={() => setRenaming(false)}/>}
       {editingLook && <AvatarEditor onClose={() => setEditingLook(false)}/>}
       {verifying && <VerifyModal onClose={() => setVerifying(false)}/>}

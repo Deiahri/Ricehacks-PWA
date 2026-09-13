@@ -42,6 +42,13 @@ export const storage = {
       // ignore
     }
   },
+  remove(key: string): void {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  },
 };
 
 /** Keep the screen on during a set (replaces expo-keep-awake). No-op where unsupported. */

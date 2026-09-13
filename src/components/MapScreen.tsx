@@ -382,7 +382,7 @@ export default function MapScreen({ me, onStartBattle }: Props) {
   const { location, connected, others } = useLive()
 
   const statusText =
-    location.status !== 'active' ? 'Location off'
+    location.status !== 'active' ? (location.resuming ? 'Locating…' : 'Location off')
     : !connected ? 'Connecting…'
     : `Live · ${others.length} nearby`
   const statusColor = location.status === 'active' && connected ? '#58cc02' : '#f59e0b'
@@ -424,7 +424,7 @@ export default function MapScreen({ me, onStartBattle }: Props) {
       </div>
 
       {/* Share-location prompt: the tap is required for the iOS Location prompt */}
-      {location.status !== 'active' && (
+      {location.status !== 'active' && !location.resuming && (
         <div className="absolute inset-x-6 z-30 flex flex-col items-center gap-3 rounded-3xl p-5 text-center anim-fade-up"
           style={{ top: '42%', background: '#ffffff', border: '2.5px solid #c8d0e0', boxShadow: '0 20px 60px rgba(0,0,0,0.16)' }}>
           <span className="font-game font-black text-lg" style={{ color: '#1a2b4a' }}>See who's nearby</span>
