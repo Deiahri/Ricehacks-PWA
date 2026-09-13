@@ -1,6 +1,6 @@
 # NextRep (PWA)
 
-A fitness battle game: find nearby players on the map, battle them with real-world workouts, and track progress and rankings. Squat and push-up reps are counted and form-scored entirely in the browser (the camera runs in the Battle flow's Workout Recording step). It's built for iPhone Safari and installable to the home screen. Video never leaves the phone.
+A fitness battle game: find nearby players on the map, battle them with real-world workouts, and track progress and rankings. Squat, push-up and pull-up reps are counted and form-scored entirely in the browser (the camera runs in the Battle flow's Workout Recording step). It's built for iPhone Safari and installable to the home screen. Video never leaves the phone.
 
 The game screens come from a Figma Make design. Battles, workouts, rep counting, scoring, accounts, friends, the global leaderboard, notifications, the profile and the Progress screen are real.
 
@@ -9,7 +9,7 @@ Every launch opens on the entry screen (NR logo, "Your best rep is your next rep
 ## Battles and workouts
 
 - **Battle (1v1):** on the Map, tap a live player and choose **⚔ Battle Request**. The other phone gets the request on any tab, with 30 s to accept.
-  - Both players vote on the exercise (squats or push-ups) and the time limit (30 s, 1 m, 2 m or 5 m). If the votes differ, the server flips a coin, and both phones show the same result.
+  - Both players vote on the exercise (squats, push-ups or pull-ups) and the time limit (30 s, 1 m, 2 m or 5 m). If the votes differ, the server flips a coin, and both phones show the same result.
   - When both cameras are running, the server starts a shared **10 s countdown**, and then the set begins.
   - Each player sees the other's reps and score live.
   - The higher score wins. A tie goes to the higher rep count, and after that it's a draw. Leaving mid-set forfeits.

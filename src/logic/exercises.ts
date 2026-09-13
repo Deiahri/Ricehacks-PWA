@@ -2,7 +2,7 @@
  * Rep counting + form scoring per exercise. 1:1 port of prototype/exercises.py.
  *
  * Each exercise drives a small state machine off one "primary" joint angle
- * (knee for squats, elbow for push-ups) and collects form metrics while a rep is
+ * (knee for squats, elbow for push-ups and pull-ups) and collects form metrics while a rep is
  * in progress. When the rep completes it is scored 0-100 from weighted sub-scores.
  *
  *     waiting --(angle > up)--> top --(angle < up - hysteresis)--> descent
@@ -271,9 +271,54 @@ export class PushUp extends Exercise {
   }
 }
 
-export type ExerciseName = 'squat' | 'pushup';
+export class PullUp extends Exercise {
+  readonly name = 'pullup';
+  readonly label = 'Pull-up';
+  // Inverted against the other moves: the dead hang is the "top" (arms straight, big elbow angle)
+  // and chin-over-bar is the "bottom", so the same state machine counts the pull as the descent.
+  readonly upThreshold = 155;
+  readonly downThreshold = 85;
+  readonly weights = { height: 0.5, dead_hang: 0.25, control: 0.25 };
+  readonly minRepSeconds = 0.9;
+
+  protected primaryAngle(pose: Pose): number | null {
+    const side = pose.bestSide('shoulder', 'elbow', 'wrist', 'hip');
+    if (side === null) return null;
+    const sh = pose.pts[side.shoulder], wr = pose.pts[side.wrist], hip = pose.pts[side.hip];
+    // Hands overhead and the body upright, so a standing curl or a push-up can't count
+    if (wr[1] >= sh[1] || angleFromVertical(sh, hip) > 40) {
+      this.status = 'Hang from the bar, arms overhead';
+      return null;
+    }
+    this.side = side;
+    return jointAngle(sh, pose.pts[side.elbow], wr);
+  }
+
+  protected collect(pose: Pose): void {
+    const s = this.side;
+    // Kipping shows up as the torso tilting away from vertical.
+    this.record('sway', angleFromVertical(pose.pts[s.shoulder], pose.pts[s.hip]));
+  }
+
+  protected evaluate(): Evaluation {
+    const sway = this.metrics.sway ?? [0];
+    const subscores: Record<string, number> = {
+      height: ramp(this.minAngle, 70, 110), // chin over the bar at <=70 deg elbow
+      dead_hang: ramp(this.lockoutAngle, 165, 140), // arms fully straight between reps
+      control: ramp(percentile(sway, 90), 8, 28),
+    };
+    const cues: string[] = [];
+    if (this.minAngle > 80) cues.push('Pull higher - chin over the bar');
+    if (subscores.dead_hang < 70) cues.push('Hang with straight arms between reps');
+    if (subscores.control < 70) cues.push('Stop kipping - keep your body still');
+    return { subscores, cues };
+  }
+}
+
+export type ExerciseName = 'squat' | 'pushup' | 'pullup';
 
 export const EXERCISES: Record<ExerciseName, () => Exercise> = {
   squat: () => new Squat(),
   pushup: () => new PushUp(),
+  pullup: () => new PullUp(),
 };

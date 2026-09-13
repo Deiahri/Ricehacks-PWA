@@ -13,11 +13,11 @@ export interface SessionConfig {
 export const EXERCISE_OPTIONS: { id: ExerciseName; label: string; icon: string; hint: string }[] = [
   { id: 'squat',  label: 'Squats',   icon: '🏋️', hint: 'Face the camera or stand side-on' },
   { id: 'pushup', label: 'Push-ups', icon: '💪', hint: 'Plank side-on to the camera' },
+  { id: 'pullup', label: 'Pull-ups', icon: '🧗', hint: 'Hang side-on with the bar in frame' },
 ]
 
 /** Moves on the way: shown locked in the picker, not playable yet (no rep counter, not in ExerciseName). */
 export const LOCKED_EXERCISES = [
-  { id: 'pullup', label: 'Pull-ups' },
   { id: 'jumping_jack', label: 'Jumping Jacks' },
   { id: 'plank', label: 'Plank' },
 ] as const

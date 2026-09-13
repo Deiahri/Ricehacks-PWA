@@ -3,15 +3,6 @@ import type { LockedExerciseId } from '../game/types'
 
 // Placeholder art for moves that aren't in the game yet: simple stick figures on a 48×48 grid.
 const FIGURES: Record<LockedExerciseId, ReactNode> = {
-  // Hanging from a bar, chin up.
-  pullup: (
-    <>
-      <path d="M5 5h38" strokeWidth="3.5"/>
-      <circle cx="24" cy="14" r="4.5"/>
-      <path d="M15 5l2 9 5 5M33 5l-2 9-5 5"/>
-      <path d="M24 18.5V32M24 32l-4 11M24 32l4 11"/>
-    </>
-  ),
   // Arms up, legs wide.
   jumping_jack: (
     <>

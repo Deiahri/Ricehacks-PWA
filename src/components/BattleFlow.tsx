@@ -305,7 +305,7 @@ function SessionPicker({ isSolo, opponent, challenge, onStart, onGesture, onExit
               <div className="font-game font-black text-sm" style={{ color: '#1a2b4a' }}>More Moves Coming Soon</div>
               <span className="text-[10px] font-game" style={{ color: '#9aaac4' }}>New exercises on the way</span>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {LOCKED_EXERCISES.map(m => <LockedExerciseCard key={m.id} id={m.id} label={m.label}/>)}
             </div>
 

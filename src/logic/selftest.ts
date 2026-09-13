@@ -53,6 +53,40 @@ function pushupPose(elbow: number, sag: number): Pose {
   return new Pose(pts, pts, vis);
 }
 
+/**
+ * Side-on dead hang: forearm vertical up to the bar, upper arm at `elbow` degrees from it, torso
+ * hanging `sway` degrees off vertical (kipping).
+ */
+function pullupPose(elbow: number, sway: number): Pose {
+  const { pts, vis } = blankPose();
+  for (const s of [SIDES.left, SIDES.right]) {
+    const elbowP = [200, 200];
+    const sh = [elbowP[0] + 70 * Math.sin(rad(elbow)), elbowP[1] - 70 * Math.cos(rad(elbow))];
+    pts[s.wrist] = [200, 140]; // on the bar, above the elbow
+    pts[s.elbow] = elbowP;
+    pts[s.shoulder] = sh;
+    pts[s.hip] = [sh[0] + 150 * Math.sin(rad(sway)), sh[1] + 150 * Math.cos(rad(sway))];
+    pts[s.knee] = [pts[s.hip][0], pts[s.hip][1] + 100];
+    pts[s.ankle] = [pts[s.hip][0], pts[s.hip][1] + 200];
+  }
+  return new Pose(pts, pts, vis);
+}
+
+/** Standing bicep curl: the wrist never gets above the shoulder, so it must never count as a pull-up. */
+function curlPose(elbow: number): Pose {
+  const { pts, vis } = blankPose();
+  for (const s of [SIDES.left, SIDES.right]) {
+    const elbowP = [200, 260];
+    pts[s.shoulder] = [200, 200];
+    pts[s.elbow] = elbowP;
+    pts[s.wrist] = [elbowP[0] + 55 * Math.sin(rad(elbow)), elbowP[1] - 55 * Math.cos(rad(elbow))];
+    pts[s.hip] = [200, 350];
+    pts[s.knee] = [200, 450];
+    pts[s.ankle] = [200, 550];
+  }
+  return new Pose(pts, pts, vis);
+}
+
 /** Primary-angle trajectory: rest at the top, ease down to `bottom`, hold, ease back up; `reps` times. */
 function trajectory(bottom: number, reps: number, top = 175): number[] {
   const angles: number[] = Array(15).fill(top);
@@ -74,6 +108,7 @@ type Scenario = {
 
 const squat = (bottom: number, reps: number, lean = 20) => trajectory(bottom, reps).map((a) => squatPose(a, lean));
 const pushup = (bottom: number, reps: number, sag = 0) => trajectory(bottom, reps).map((a) => pushupPose(a, sag));
+const pullup = (bottom: number, reps: number, sway = 0) => trajectory(bottom, reps).map((a) => pullupPose(a, sway));
 
 const expect = (cond: boolean, why: string) => (cond ? null : why);
 const scores = (ex: Exercise) => ex.reps.map((r) => r.score);
@@ -111,6 +146,23 @@ const SCENARIOS: Scenario[] = [
   {
     name: 'Push-up: shallow (115°)', exercise: 'pushup', frames: pushup(115, 1),
     check: (ex) => expect(ex.reps.length === 0 && ex.partialReps === 1, 'expected 0 reps, 1 partial'),
+  },
+  {
+    name: 'Pull-up: 3 good reps', exercise: 'pullup', frames: pullup(60, 3),
+    check: (ex) => expect(ex.reps.length === 3 && scores(ex).every((s) => s === 100), 'expected 3 x 100%'),
+  },
+  {
+    name: 'Pull-up: shallow (120°)', exercise: 'pullup', frames: pullup(120, 1),
+    check: (ex) => expect(ex.reps.length === 0 && ex.partialReps === 1, 'expected 0 reps, 1 partial'),
+  },
+  {
+    name: 'Pull-up: kipping (25°)', exercise: 'pullup', frames: pullup(60, 1, 25),
+    check: (ex) => expect(ex.reps.length === 1 && near(ex.reps[0].score, 79, 2) && cues(ex).includes('Stop kipping'),
+      'expected 1 rep ~79% with "Stop kipping"'),
+  },
+  {
+    name: 'Pull-up: standing curl', exercise: 'pullup', frames: trajectory(50, 2).map(curlPose),
+    check: (ex) => expect(ex.reps.length === 0 && ex.status.startsWith('Hang from the bar'), 'expected "Hang from the bar"'),
   },
   {
     name: 'No person in frame', exercise: 'squat', frames: Array(10).fill(null),
