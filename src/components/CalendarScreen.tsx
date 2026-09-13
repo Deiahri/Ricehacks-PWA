@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import CharacterSprite from './CharacterSprite'
+import UnverifiedTag from './UnverifiedTag'
 import WorkoutDetail from './WorkoutDetail'
-import { ACCENT, ACCENT_BG } from '../App'
+import { ACCENT, ACCENT_BG } from '../theme'
 import { skinColors } from '../config/appearance'
 import type { Equipped } from '../config/cosmetics'
 import { EXERCISE_OPTIONS } from '../game/types'
@@ -282,7 +283,7 @@ function FriendProfile({ friend, rank, onClose, onChallenge }: {
   const canBattle = !!friend.online && !friend.busy && !!friend.presenceId
 
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto anim-fade-up" style={{ background: '#ffffff' }}>
+    <div className="absolute inset-0 z-30 overflow-y-auto anim-slide-in-right" style={{ background: '#ffffff' }}>
       {/* Hero */}
       <div className="relative w-full" style={{ background: bg, borderBottom: '2.028px solid #c8d0e0', paddingTop: 'var(--top-gap)', paddingBottom: 24 }}>
         {/* Back button */}
@@ -314,6 +315,7 @@ function FriendProfile({ friend, rank, onClose, onChallenge }: {
 
           <div className="flex flex-col items-center text-center gap-2 pt-2 flex-1 min-w-0">
             <p className="whitespace-nowrap truncate max-w-full" style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 22, lineHeight: '28px', color: '#1a2b4a' }}>{friend.username}</p>
+            <UnverifiedTag verified={friend.verified}/>
             <p style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, fontSize: 14, lineHeight: '15px', color: friend.online ? '#58cc02' : '#7a8ba8', marginTop: -4 }}>
               {friend.online ? '● Online' : '○ Offline'}
             </p>
@@ -426,7 +428,10 @@ function FriendRow({ friend, rank, onOpen }: { friend: Friend; rank: number; onO
         />
       </div>
       <div className="flex-1 min-w-0">
-        <span className="font-game font-bold text-sm truncate block" style={{ color: '#1a2b4a' }}>{friend.username}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-game font-bold text-sm truncate" style={{ color: '#1a2b4a' }}>{friend.username}</span>
+          <UnverifiedTag verified={friend.verified}/>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-game font-bold" style={{ color: ACCENT }}>Lvl {friend.level}</span>
         </div>
@@ -571,7 +576,7 @@ export function RankBadge({ rank }: { rank: number }) {
 // Full-screen expanded list, reused by both leaderboards
 function ExpandedList({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto anim-fade-up" style={{ background: '#ffffff' }}>
+    <div className="absolute inset-0 z-30 overflow-y-auto anim-slide-in-right" style={{ background: '#ffffff' }}>
       <div className="px-4 pt-(--top-gap) pb-3 flex items-center gap-3">
         <button
           onClick={onClose}

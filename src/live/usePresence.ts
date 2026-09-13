@@ -20,6 +20,8 @@ export interface RemotePlayer {
   ts: number
   /** In a challenge or a solo workout. */
   busy?: boolean
+  /** False = verification is on and they haven't verified; null = no account yet. */
+  verified?: boolean | null
 }
 
 /** Any non-snapshot message from the presence server (challenge traffic, save acks). */

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { BattleBreakdown, DuelToast, HpDuel } from './BattleHud'
 import CharacterSprite from './CharacterSprite'
 import CameraFeed from './CameraFeed'
+import { LockedExerciseCard } from './LockedExercises'
 import type { Player, BattleStep } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
 import { unlockAudio } from '../audio/sfx'
@@ -15,7 +16,7 @@ import { useCombo } from '../game/useCombo'
 import { useRepSession } from '../game/useRepSession'
 import { avgForm, formatClock, formatDuration, repQuality, totalScore, type RepQuality } from '../game/scoring'
 import {
-  COUNTDOWN_MS, DURATIONS, EXERCISE_OPTIONS,
+  COUNTDOWN_MS, DURATIONS, EXERCISE_OPTIONS, LOCKED_EXERCISES,
   type ChallengeResult, type DurationS, type SessionConfig, type SideResult,
 } from '../game/types'
 import { useSocket } from '../live/LiveProvider'
@@ -297,6 +298,15 @@ function SessionPicker({ isSolo, opponent, challenge, onStart, onGesture, onExit
                 </button>
               )
             })}
+
+            {/* Placeholders: more moves are on the way */}
+            <div className="flex items-baseline justify-between gap-2 mt-3">
+              <div className="font-game font-black text-sm" style={{ color: '#1a2b4a' }}>More Moves Coming Soon</div>
+              <span className="text-[10px] font-game" style={{ color: '#9aaac4' }}>New exercises on the way</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {LOCKED_EXERCISES.map(m => <LockedExerciseCard key={m.id} id={m.id} label={m.label}/>)}
+            </div>
 
             <div className="font-game font-black text-sm mt-3" style={{ color: '#1a2b4a' }}>Time limit</div>
             <div className="grid grid-cols-5 gap-2">

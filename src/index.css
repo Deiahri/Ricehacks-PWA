@@ -147,3 +147,36 @@ html, body, #root {
 .anim-bounce     { animation: resultBounce 1s cubic-bezier(.36,.07,.19,.97) both; }
 .anim-skeleton   { animation: skeletonPulse 1.5s ease-in-out infinite; }
 .anim-pop-in     { animation: popIn 0.3s cubic-bezier(.22,1,.36,1) both; }
+
+/* Tab changes (App.tsx TabStage): the new page pushes the old one out, sideways in the direction of the tab. The
+   entering page has no fill-mode, so it's left with no transform once it lands (a transform would trap its z-30
+   overlays under the nav); the leaving page holds its end state until it unmounts. */
+@keyframes tabInFromRight { from { transform: translateX(100%); }  to { transform: translateX(0); } }
+@keyframes tabInFromLeft  { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes tabOutToLeft   { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@keyframes tabOutToRight  { from { transform: translateX(0); } to { transform: translateX(100%); } }
+.tab-in-from-right { animation: tabInFromRight 0.3s cubic-bezier(.22,1,.36,1); }
+.tab-in-from-left  { animation: tabInFromLeft 0.3s cubic-bezier(.22,1,.36,1); }
+.tab-out-to-left   { animation: tabOutToLeft 0.3s cubic-bezier(.22,1,.36,1) forwards; }
+.tab-out-to-right  { animation: tabOutToRight 0.3s cubic-bezier(.22,1,.36,1) forwards; }
+
+/* Full-screen sub-pages (workout detail, friend profile, shop) slide in from the right. */
+@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.anim-slide-in-right { animation: slideInRight 0.3s cubic-bezier(.22,1,.36,1); }
+
+/* A locked card's "not yet" wiggle. */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px) rotate(-1deg); }
+  40% { transform: translateX(6px) rotate(1deg); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.anim-shake { animation: shake 0.4s ease; }
+
+/* Still finish (so animationend fires and the old page unmounts), just instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .tab-in-from-right, .tab-in-from-left, .tab-out-to-left, .tab-out-to-right, .anim-slide-in-right, .anim-shake {
+    animation-duration: 1ms;
+  }
+}

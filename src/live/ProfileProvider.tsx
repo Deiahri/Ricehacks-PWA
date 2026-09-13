@@ -16,6 +16,8 @@ export interface Profile {
   losses: number
   equipped: Equipped
   owned: string[]
+  /** Identity verified (Persona). Always true while the server runs without verification; absent from older servers. */
+  verified?: boolean
 }
 
 export interface Friend extends Profile {

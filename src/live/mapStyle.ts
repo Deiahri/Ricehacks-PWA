@@ -9,12 +9,18 @@ const C = {
   landuse: '#44c07c',
   grass: '#46c878',
   wood: '#3db85a',
+  // Blocks of homes and campuses a paler, warmer green so the ground isn't one flat colour.
+  residential: '#8fd3a0',
+  campus: '#b9dfa6',
   water: '#2aa8c8',
   road: '#2a7a68',
   path: '#5ad08e',
   casing: 'rgba(255,255,255,0.18)',
-  building: '#3fbc80',
-  buildingEdge: '#36aa77',
+  // Buildings stand out in warm cream with terracotta edges; taller ones get sandier (see fill-extrusion).
+  building: '#f3e3c3',
+  buildingEdge: '#c9825b',
+  buildingLow: '#f6e8cc',
+  buildingTall: '#e6c99a',
   label: '#ffffff',
   halo: '#1f6352',
 }
@@ -45,11 +51,17 @@ function restyle(layer: LayerSpecification): LayerSpecification | null {
         paint['fill-outline-color'] = C.buildingEdge
       } else if (/wood/.test(id)) paint['fill-color'] = C.wood
       else if (/park|grass|pitch|wetland|cemetery|track/.test(id)) paint['fill-color'] = C.grass
+      else if (/residential/.test(id)) paint['fill-color'] = C.residential
+      else if (/school|hospital/.test(id)) paint['fill-color'] = C.campus
       else paint['fill-color'] = C.landuse
       break
     case 'fill-extrusion':
-      paint['fill-extrusion-color'] = C.building
-      paint['fill-extrusion-opacity'] = 0.6
+      paint['fill-extrusion-color'] = [
+        'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 0],
+        0, C.buildingLow,
+        40, C.buildingTall,
+      ]
+      paint['fill-extrusion-opacity'] = 0.9
       break
     case 'line':
       if (/water/.test(id)) paint['line-color'] = C.water

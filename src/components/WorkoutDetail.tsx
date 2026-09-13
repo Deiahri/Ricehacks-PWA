@@ -116,7 +116,7 @@ export default function WorkoutDetail({ entry, onClose }: { entry: WorkoutEntry;
   const when = new Date(entry.createdAt).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
   return (
-    <div className="absolute inset-0 z-30 overflow-y-auto anim-fade-up" style={{ background: '#ffffff' }}>
+    <div className="absolute inset-0 z-30 overflow-y-auto anim-slide-in-right" style={{ background: '#ffffff' }}>
       <div className="px-4 pt-(--top-gap) pb-3 flex items-center gap-3">
         <button
           onClick={onClose}

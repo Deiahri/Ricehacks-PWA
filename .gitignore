@@ -4,3 +4,5 @@ dev-dist/
 public/wasm/
 .logic-test/
 *.local
+.env
+*.tsbuildinfo

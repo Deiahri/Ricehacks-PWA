@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import svgPaths from '../imports/GameAppDesignOverview/svg-8d6d6pxw63'
 import AvatarEditor from './AvatarEditor'
 import CharacterSprite from './CharacterSprite'
+import ShopScreen from './ShopScreen'
+import ShopSign from './ShopSign'
+import { ShieldIcon } from './UnverifiedTag'
 import UsernamePicker from './UsernamePicker'
+import VerifyModal from './VerifyModal'
 import type { Player } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
-import { COSMETICS, cosmeticUrl, type Cosmetic } from '../config/cosmetics'
-import { api, ApiError } from '../live/api'
 import { canSignOut, signOut } from '../live/credential'
 import { useProfile } from '../live/ProfileProvider'
 import { useGlobalLeaderboard } from '../live/useLeaderboard'
@@ -29,58 +31,24 @@ function Pen() {
   )
 }
 
-// ─── Shop items (src/config/cosmetics.ts) ─────────────────────────
-type CardState = 'equipped' | 'owned' | 'buy' | 'poor' | 'offline'
-
-const SHOP_ERRORS: Record<string, string> = {
-  'insufficient-bp': "You don't have enough BP for that yet.",
-  owned: 'You already own that item.',
-  'not-owned': "You don't own that item.",
-  offline: "Can't reach the server. Try again.",
-  'no-db': "The server isn't storing accounts right now.",
-}
-
-const CARD_TILTS = ['rotate(-4deg)', 'rotate(4deg)', 'rotate(3deg)', 'rotate(-3deg)']
-
-function ShopItemCard({ item, index, cost, state, busy, onTap }: {
-  item: Cosmetic
-  index: number
-  cost: number
-  state: CardState
-  busy: boolean
-  onTap: () => void
-}) {
-  const tilt = CARD_TILTS[index % CARD_TILTS.length]
-  const button = {
-    equipped: { label: '✓ Equipped', bg: '#58cc02', fg: '#fff', border: '#58cc02' },
-    owned:    { label: 'Equip',      bg: ACCENT,    fg: '#fff', border: ACCENT },
-    buy:      { label: `◆ ${cost} BP · Buy`, bg: '#fffbeb', fg: '#b45309', border: '#fde68a' },
-    poor:     { label: `◆ ${cost} BP`, bg: 'rgba(255,255,255,0.6)', fg: '#7a8ba8', border: '#c8d0e0' },
-    offline:  { label: `◆ ${cost} BP`, bg: 'rgba(255,255,255,0.6)', fg: '#7a8ba8', border: '#c8d0e0' },
-  }[state]
+// ─── "You're unverified" warning, top of the profile ──────────────
+function UnverifiedBanner({ onVerify }: { onVerify: () => void }) {
   return (
-    <div className="flex flex-col gap-3 p-4 rounded-[20px]"
-      style={{ background: item.tint, border: `2.028px solid ${item.glowColor}44`, boxShadow: `0 6px 20px ${item.glowColor}22`, minHeight: 210 }}>
-      {/* Icon — large, tilted */}
-      <div className="flex items-center justify-center w-full" style={{ height: 90, overflow: 'visible' }}>
-        <img
-          src={cosmeticUrl(item)}
-          alt={item.name}
-          style={{ maxHeight: 86, maxWidth: '100%', objectFit: 'contain', transform: tilt, filter: `drop-shadow(0 4px 10px ${item.glowColor}66)` }}
-        />
+    <div className="mx-4 mb-4 flex items-center gap-3 px-3 py-2.5 rounded-2xl anim-fade-up"
+      style={{ background: '#fffbeb', border: '2px solid #fde68a', boxShadow: '0 4px 14px rgba(245,158,11,0.12)' }}>
+      <ShieldIcon size={26}/>
+      <div className="flex-1 min-w-0">
+        <p className="font-game font-black text-[13px] leading-tight" style={{ color: '#b45309' }}>You're Unverified</p>
+        <p className="font-game text-[11px] leading-snug" style={{ color: '#b45309cc' }}>
+          You won't rank on the global leaderboard, and other players see an Unverified tag.
+        </p>
       </div>
-      <p style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 13, lineHeight: '16px', color: '#1a2b4a' }}>{item.name}</p>
-      <p style={{ fontFamily: "'Nunito:Bold',sans-serif", fontWeight: 700, fontSize: 10.5, lineHeight: '14px', color: item.glowColor }}>⚔ {item.effect}</p>
-      <p style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, fontSize: 10, lineHeight: '14px', color: '#4a6080', flexGrow: 1 }}>{item.description}</p>
       <button
-        onClick={onTap}
-        disabled={busy || state === 'poor' || state === 'offline'}
-        className="flex items-center justify-center py-2 rounded-[12px] w-full transition-transform active:scale-95"
-        style={{ background: button.bg, border: `1.5px solid ${button.border}`, opacity: busy ? 0.6 : 1 }}
+        onClick={onVerify}
+        className="px-3 py-2 rounded-xl font-game font-black text-xs text-white flex-shrink-0 transition-transform active:scale-95"
+        style={{ background: '#f59e0b', boxShadow: '0 3px 10px rgba(245,158,11,0.4)' }}
       >
-        <span style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 13, color: button.fg }}>
-          {busy ? '…' : button.label}
-        </span>
+        Verify →
       </button>
     </div>
   )
@@ -88,56 +56,29 @@ function ShopItemCard({ item, index, cost, state, busy, onTap }: {
 
 // ─── Main ─────────────────────────────────────────────────────────
 export default function ProfileScreen({ me }: Props) {
-  const { profile, buy, equip } = useProfile()
-  const [prices, setPrices] = useState<Record<string, number>>({})
-  const [busyId, setBusyId] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const { profile } = useProfile()
   const [renaming, setRenaming] = useState(false)
   const [editingLook, setEditingLook] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
+  const [verifying, setVerifying] = useState(false)
   const { board } = useGlobalLeaderboard()
   const color   = ACCENT
   const wins    = me.wins
   const losses  = me.losses
   const winRate = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0
-  // Global rank by best set score; no sets yet = unranked.
+  const unverified = profile?.verified === false
+  // Global rank by best set score; no sets yet (or unverified) = unranked.
   const rank    = board?.me && board.me.bestScore !== null ? board.me.rank : null
 
-  // The server owns prices; the config's are a fallback until it answers.
-  useEffect(() => {
-    api<{ id: string; cost: number }[]>('GET', '/api/shop')
-      .then(list => setPrices(Object.fromEntries(list.map(i => [i.id, i.cost]))), () => {})
-  }, [])
-
-  const costOf = (c: Cosmetic) => prices[c.id] ?? c.cost
-  const stateOf = (c: Cosmetic): CardState =>
-    !profile ? 'offline'
-    : profile.equipped[c.slot] === c.id ? 'equipped'
-    : profile.owned.includes(c.id) ? 'owned'
-    : profile.bp >= costOf(c) ? 'buy'
-    : 'poor'
-
-  // Buy, equip, or (tapping an equipped item) take it off.
-  const tapItem = async (c: Cosmetic) => {
-    const state = stateOf(c)
-    if (busyId || state === 'poor' || state === 'offline') return
-    if (state === 'buy' && !window.confirm(`Buy ${c.name} for ${costOf(c)} BP?`)) return
-    setBusyId(c.id)
-    setMessage(null)
-    try {
-      if (state === 'buy') await buy(c.id)
-      else await equip(c.slot, state === 'equipped' ? null : c.id)
-    } catch (e) {
-      setMessage(SHOP_ERRORS[e instanceof ApiError ? e.code : ''] ?? 'Something went wrong. Try again.')
-    } finally {
-      setBusyId(null)
-    }
-  }
-
   return (
-    <div className="absolute inset-0 overflow-y-auto" style={{ background: '#ffffff' }}>
+    // Overlays (shop, sheets) sit outside the scroller, so they cover the screen wherever it's scrolled to.
+    <div className="absolute inset-0" style={{ background: '#ffffff' }}>
+    <div className="absolute inset-0 overflow-y-auto">
 
       {/* ── Hero section ── */}
       <div className="relative w-full" style={{ background: ACCENT_BG, borderBottom: '2.028px solid #c8d0e0', paddingTop: 'var(--top-gap)', paddingBottom: 24 }}>
+
+        {unverified && <UnverifiedBanner onVerify={() => setVerifying(true)}/>}
 
         {/* Rank line — compact, centered, just above the content */}
         <p className="text-center mb-4 whitespace-nowrap"
@@ -149,7 +90,7 @@ export default function ProfileScreen({ me }: Props) {
             </>
           ) : (
             <span style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, color: '#7a8ba8' }}>
-              {board ? 'Unranked · finish a set to rank' : ' '}
+              {unverified ? 'Unranked · verify to rank' : board ? 'Unranked · finish a set to rank' : ' '}
             </span>
           )}
         </p>
@@ -234,30 +175,12 @@ export default function ProfileScreen({ me }: Props) {
         </div>
       </div>
 
-      {/* ── Shop section ── */}
-      <div className="relative w-full px-5 pt-5 pb-6">
-        <div className="flex flex-col items-center mb-3">
-          <p style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 20, lineHeight: '28px', color: '#1a2b4a', textAlign: 'center' }}>Item Shop</p>
-          <p className="font-game text-xs text-center" style={{ color: '#7a8ba8' }}>
-            Earn BP from workouts and battles. Everyone sees what you wear.
-          </p>
-        </div>
-        {message && (
-          <p className="font-game font-bold text-xs text-center mb-3" style={{ color: '#ff4b4b' }}>{message}</p>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          {COSMETICS.map((item, i) => (
-            <ShopItemCard
-              key={item.id}
-              item={item}
-              index={i}
-              cost={costOf(item)}
-              state={stateOf(item)}
-              busy={busyId === item.id}
-              onTap={() => void tapItem(item)}
-            />
-          ))}
-        </div>
+      {/* ── Shop entrance: a wooden sign ── */}
+      <div className="relative w-full px-5 pt-6 pb-6 flex flex-col items-center gap-2">
+        <ShopSign onClick={() => setShopOpen(true)}/>
+        <p className="font-game text-xs text-center" style={{ color: '#7a8ba8' }}>
+          Gear up with BP from workouts and battles. Everyone sees what you wear.
+        </p>
       </div>
 
       {canSignOut() && (
@@ -270,8 +193,11 @@ export default function ProfileScreen({ me }: Props) {
       )}
 
       <div style={{ height: 80 }}/>
+    </div>
+      {shopOpen && <ShopScreen onClose={() => setShopOpen(false)}/>}
       {renaming && <UsernamePicker mode="rename" onClose={() => setRenaming(false)}/>}
       {editingLook && <AvatarEditor onClose={() => setEditingLook(false)}/>}
+      {verifying && <VerifyModal onClose={() => setVerifying(false)}/>}
     </div>
   )
 }

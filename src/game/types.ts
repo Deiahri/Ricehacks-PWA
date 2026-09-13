@@ -15,6 +15,14 @@ export const EXERCISE_OPTIONS: { id: ExerciseName; label: string; icon: string; 
   { id: 'pushup', label: 'Push-ups', icon: '💪', hint: 'Plank side-on to the camera' },
 ]
 
+/** Moves on the way: shown locked in the picker, not playable yet (no rep counter, not in ExerciseName). */
+export const LOCKED_EXERCISES = [
+  { id: 'pullup', label: 'Pull-ups' },
+  { id: 'jumping_jack', label: 'Jumping Jacks' },
+  { id: 'plank', label: 'Plank' },
+] as const
+export type LockedExerciseId = (typeof LOCKED_EXERCISES)[number]['id']
+
 /** "Get in position" time between the camera being ready and rep counting starting. */
 export const COUNTDOWN_MS = 10_000
 
@@ -26,6 +34,8 @@ export interface RemoteBrief {
   /** Skin tone id (src/config/appearance.ts). */
   skin?: string | null
   equipped?: Equipped
+  /** False = verification is on and they haven't verified. */
+  verified?: boolean | null
 }
 
 export interface SideResult extends RemoteBrief {

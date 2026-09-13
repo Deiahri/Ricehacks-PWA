@@ -1,4 +1,4 @@
-# CV Exercise (PWA)
+# NextRep (PWA)
 
 A fitness battle game: find nearby players on the map, battle them with real-world workouts, and track progress and rankings. Squat and push-up reps are counted and form-scored entirely in the browser (the camera runs in the Battle flow's Workout Recording step). It's built for iPhone Safari and installable to the home screen. Video never leaves the phone.
 

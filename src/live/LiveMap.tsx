@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // MapLibre builds its worker URL at runtime, which Vite can't see; bundle the worker explicitly instead.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import CharacterSprite from '../components/CharacterSprite'
+import UnverifiedTag from '../components/UnverifiedTag'
 import type { Player } from '../App'
 import { skinColors } from '../config/appearance'
 import { loadStylizedStyle } from './mapStyle'
@@ -157,12 +158,15 @@ export default function LiveMap({ me, position, heading, others, onSelect }: Pro
             </MapMarker>
           )}
           <MapMarker map={map} lngLat={[position.lng, position.lat]} options={{ anchor: 'bottom' }}>
-            <div style={{
-              lineHeight: 0,
-              pointerEvents: 'none',
-              filter: 'drop-shadow(1px 0 0 #ffd700) drop-shadow(-1px 0 0 #ffd700) drop-shadow(0 1px 0 #ffd700) drop-shadow(0 -1px 0 #ffd700) drop-shadow(0 0 4px rgba(255,215,0,0.6))',
-            }}>
-              <CharacterSprite size="md" animate {...me.appearance} equipped={me.equipment} />
+            <div className="flex flex-col items-center" style={{ pointerEvents: 'none' }}>
+              {/* What others see over my head until I verify */}
+              {me.verified === false && <div style={{ marginBottom: 2 }}><UnverifiedTag verified={false} size="xs"/></div>}
+              <div style={{
+                lineHeight: 0,
+                filter: 'drop-shadow(1px 0 0 #ffd700) drop-shadow(-1px 0 0 #ffd700) drop-shadow(0 1px 0 #ffd700) drop-shadow(0 -1px 0 #ffd700) drop-shadow(0 0 4px rgba(255,215,0,0.6))',
+              }}>
+                <CharacterSprite size="md" animate {...me.appearance} equipped={me.equipment} />
+              </div>
             </div>
           </MapMarker>
         </>
@@ -202,6 +206,7 @@ function OtherPlayer({ map, player, me, flip, onSelect }: {
           style={{ transition: 'transform 0.15s', transformOrigin: 'bottom center' }}
           onClick={() => onSelect(player)}
         >
+          {player.verified === false && <div style={{ marginBottom: 2 }}><UnverifiedTag verified={false} size="xs"/></div>}
           <div
             className="font-game font-black px-2 py-0.5 rounded-full shadow text-[11px] whitespace-nowrap"
             style={{ background: player.shirt, color: '#fff', border: '1.5px solid rgba(255,255,255,0.6)', marginBottom: -10, position: 'relative', zIndex: 1 }}

@@ -51,12 +51,12 @@ export interface Player {
   /** Skin tone id behind appearance.skin (src/config/appearance.ts). */
   skinTone?: string | null
   equipment: Equipment
+  /** False = identity verification is on and they haven't verified (null/absent = unknown, or verification off). */
+  verified?: boolean | null
 }
 
-// A saturated brand accent used for UI chrome now that archetypes are gone.
-// Per-player differentiation comes from each avatar's shirt colour.
-export const ACCENT = '#4a90e2'
-export const ACCENT_BG = '#eff5ff'
+// Brand accent (src/theme.ts), re-exported for the screens that import it from here.
+export { ACCENT, ACCENT_BG } from './theme'
 
 /** Me before my account loads; Game() fills in name, level, BP, record and gear from the server. */
 export const ME: Player = {
@@ -91,14 +91,14 @@ function DumbbellIcon({ color = '#fff' }: { color?: string }) {
   )
 }
 
-function CalendarIcon({ active }: { active: boolean }) {
+// Progress: a line trending up over a small axis.
+function TrendIcon({ active }: { active: boolean }) {
+  const c = active ? '#58cc02' : '#9aaac4'
   return (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="4" width="18" height="18" rx="3" stroke={active ? '#58cc02' : '#9aaac4'} strokeWidth="2.2"/>
-      <path d="M3 9h18" stroke={active ? '#58cc02' : '#9aaac4'} strokeWidth="2.2"/>
-      <path d="M8 2v4M16 2v4" stroke={active ? '#58cc02' : '#9aaac4'} strokeWidth="2.2" strokeLinecap="round"/>
-      <rect x="7" y="13" width="3" height="3" rx="0.5" fill={active ? '#58cc02' : '#9aaac4'}/>
-      <rect x="14" y="13" width="3" height="3" rx="0.5" fill={active ? '#58cc02' : '#9aaac4'}/>
+      <path d="M3 3.5V20.5H20.5" stroke={c} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M7 15.5l3.8-4 3 3 5.7-6" stroke={c} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M15.3 8.2h4.4v4.4" stroke={c} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
 }
@@ -122,13 +122,15 @@ function ProfileIcon({ active }: { active: boolean }) {
   )
 }
 
-function LeaderboardIcon({ active }: { active: boolean }) {
+// Ranks: a winners' podium, 1st in the middle under a star.
+function PodiumIcon({ active }: { active: boolean }) {
   const c = active ? '#58cc02' : '#9aaac4'
   return (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="12" width="4" height="9" rx="1.5" fill={c}/>
-      <rect x="10" y="7" width="4" height="14" rx="1.5" fill={c}/>
-      <rect x="17" y="4" width="4" height="17" rx="1.5" fill={c}/>
+      <path d="M12 1.6l1.15 2.3 2.5.37-1.8 1.77.42 2.5L12 7.35 9.73 8.54l.42-2.5-1.8-1.77 2.5-.37z" fill={c}/>
+      <rect x="8.6" y="10" width="6.8" height="12" rx="1.2" fill={c}/>
+      <rect x="1.5" y="14" width="6.5" height="8" rx="1.2" fill={c} opacity="0.7"/>
+      <rect x="16" y="16.5" width="6.5" height="5.5" rx="1.2" fill={c} opacity="0.7"/>
     </svg>
   )
 }
@@ -189,8 +191,8 @@ function BottomNav({
         borderTop: '2.5px solid #c8d0e0',
       }}
     >
-      {navBtn('calendar', <CalendarIcon active={tab === 'calendar'}/>, 'Progress')}
-      {navBtn('leaderboard', <LeaderboardIcon active={tab === 'leaderboard'}/>, 'Ranks')}
+      {navBtn('calendar', <TrendIcon active={tab === 'calendar'}/>, 'Progress')}
+      {navBtn('leaderboard', <PodiumIcon active={tab === 'leaderboard'}/>, 'Ranks')}
 
       {/* Centre: Map / Workout CTA */}
       <button
@@ -241,6 +243,44 @@ function BottomNav({
   )
 }
 
+/** The tabs left to right, as in the nav: a tab further right slides in from the right. */
+const TAB_ORDER: Tab[] = ['calendar', 'leaderboard', 'map', 'notifications', 'profile']
+
+/**
+ * The open tab. Changing tabs pushes the old page out while the new one slides in from the side its nav button is on.
+ * Each page keeps its key, so the one leaving isn't remounted (the map keeps its WebGL context) and unmounts when its
+ * slide ends. A tap mid-slide drops the page that was leaving.
+ */
+function TabStage({ tab, render }: { tab: Tab; render: (t: Tab) => React.ReactNode }) {
+  const [shown, setShown] = useState(tab)
+  const [leaving, setLeaving] = useState<{ tab: Tab; dir: 1 | -1 } | null>(null)
+  if (tab !== shown) {
+    setLeaving({ tab: shown, dir: TAB_ORDER.indexOf(tab) > TAB_ORDER.indexOf(shown) ? 1 : -1 })
+    setShown(tab)
+  }
+  const pages = leaving ? [leaving.tab, shown] : [shown]
+
+  return (
+    <>
+      {pages.map(t => {
+        const cls = !leaving ? ''
+          : t === shown ? (leaving.dir > 0 ? 'tab-in-from-right' : 'tab-in-from-left')
+          : (leaving.dir > 0 ? 'tab-out-to-left' : 'tab-out-to-right')
+        return (
+          <div
+            key={t}
+            className={`absolute inset-0 ${cls}`}
+            // Only this wrapper's own slide: screens run animations of their own that bubble up here.
+            onAnimationEnd={e => { if (e.target === e.currentTarget && t !== shown) setLeaving(null) }}
+          >
+            {render(t)}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 function endMessage(status: EndStatus | null, name: string): string {
   switch (status) {
     case 'declined':     return `${name} declined your battle request`
@@ -278,6 +318,7 @@ function Game() {
     appearance: { ...ME.appearance, ...skinColors(profile?.skin), shirt: profile?.shirt ?? IDENTITY.shirt },
     skinTone: profile?.skin ?? null,
     equipment: profile?.equipped ?? {},
+    verified: profile?.verified ?? null,
   }
   const opponent = cs.opponent ? toPlayer(cs.opponent, me) : null
   const soloActive = battleStep !== null && isSoloWorkout
@@ -327,7 +368,7 @@ function Game() {
 
   const challengeFriend = (f: Friend) => {
     if (!f.presenceId) return
-    startBattle(toPlayer({ id: f.presenceId, name: f.username, username: f.username, shirt: f.shirt ?? ME.appearance.shirt, skin: f.skin, equipped: f.equipped }, me))
+    startBattle(toPlayer({ id: f.presenceId, name: f.username, username: f.username, shirt: f.shirt ?? ME.appearance.shirt, skin: f.skin, equipped: f.equipped, verified: f.verified }, me))
   }
 
   const startSoloWorkout = () => {
@@ -358,12 +399,13 @@ function Game() {
         />
       ) : (
         <>
-          {tab === 'map'           && <MapScreen me={me} onStartBattle={startBattle}/>}
-          {tab === 'map'           && <InstallHint/>}
-          {tab === 'calendar'      && <CalendarScreen/>}
-          {tab === 'leaderboard'   && <LeaderboardScreen onChallenge={challengeFriend}/>}
-          {tab === 'notifications' && <NotificationsScreen/>}
-          {tab === 'profile'       && <ProfileScreen me={me}/>}
+          <TabStage tab={tab} render={t =>
+            t === 'map' ? <><MapScreen me={me} onStartBattle={startBattle}/><InstallHint/></>
+            : t === 'calendar' ? <CalendarScreen/>
+            : t === 'leaderboard' ? <LeaderboardScreen onChallenge={challengeFriend}/>
+            : t === 'notifications' ? <NotificationsScreen/>
+            : <ProfileScreen me={me}/>
+          }/>
 
           <BottomNav tab={tab} setTab={setTab} onWorkoutTap={startSoloWorkout} notificationCount={friends.incoming.length + inbox.unread}/>
         </>

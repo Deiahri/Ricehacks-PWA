@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Avatar, FriendsSection, RankBadge } from './CalendarScreen'
+import { ShieldIcon } from './UnverifiedTag'
+import VerifyModal from './VerifyModal'
 import { ACCENT } from '../App'
 import { DEFAULT_SHIRT } from '../config/appearance'
 import { formatDuration } from '../game/scoring'
@@ -47,26 +49,46 @@ function GlobalRow({ entry }: { entry: GlobalEntry }) {
   )
 }
 
-/** Everyone on the app, ranked by their best single-set score. */
-function GlobalLeaderboard() {
+/** In place of my rank while I'm unverified: why I'm missing, and the way in. */
+function VerifyToRankCard({ onVerify }: { onVerify: () => void }) {
+  return (
+    <button
+      onClick={onVerify}
+      className="w-full flex items-center gap-3 p-3 mb-4 rounded-2xl text-left transition-transform active:scale-[0.98] anim-fade-up"
+      style={{ background: '#fffbeb', border: '2.5px solid #fde68a', boxShadow: '0 4px 14px rgba(245,158,11,0.12)' }}
+    >
+      <ShieldIcon size={30}/>
+      <div className="flex-1 min-w-0">
+        <p className="font-game font-black text-sm leading-tight" style={{ color: '#b45309' }}>Verify To Rank Globally</p>
+        <p className="font-game text-[11px] leading-snug" style={{ color: '#b45309cc' }}>Only verified players appear on the global board. Takes about 2 minutes.</p>
+      </div>
+      <span className="px-3 py-2 rounded-xl font-game font-black text-xs text-white flex-shrink-0" style={{ background: '#f59e0b' }}>Verify →</span>
+    </button>
+  )
+}
+
+/** Verified players, ranked by their best single-set score. */
+function GlobalLeaderboard({ onVerify }: { onVerify: () => void }) {
   const { board, failed, reload } = useGlobalLeaderboard()
   const me = board?.me
-  const ranked = me && me.bestScore !== null
+  const unverified = me?.verified === false
+  const ranked = me && me.bestScore !== null && me.rank !== null
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-3">
         <div className="min-w-0">
           <h2 className="font-game font-black text-xl leading-tight" style={{ color: '#1a2b4a' }}>Global Leaderboard</h2>
-          <p className="text-xs font-game" style={{ color: '#7a8ba8' }}>Everyone, ranked by their best set score</p>
+          <p className="text-xs font-game" style={{ color: '#7a8ba8' }}>Verified players, ranked by their best set score</p>
         </div>
         {me && (
           <div className="text-right flex-shrink-0">
             <div className="font-game font-black text-base" style={{ color: ranked ? '#f59e0b' : '#9aaac4' }}>{ranked ? `#${me.rank}` : '—'}</div>
-            <div className="text-[10px] font-game" style={{ color: '#7a8ba8' }}>{ranked ? 'Your rank' : 'Finish a set to rank'}</div>
+            <div className="text-[10px] font-game" style={{ color: '#7a8ba8' }}>{ranked ? 'Your rank' : unverified ? 'Unverified' : 'Finish a set to rank'}</div>
           </div>
         )}
       </div>
+      {unverified && <VerifyToRankCard onVerify={onVerify}/>}
 
       {!board && !failed && (
         <p className="text-xs font-game text-center py-6" style={{ color: '#7a8ba8' }}>Loading the leaderboard…</p>
@@ -91,6 +113,7 @@ function GlobalLeaderboard() {
 
 export default function LeaderboardScreen({ onChallenge }: { onChallenge: (f: Friend) => void }) {
   const [view, setView] = useState<'global' | 'friends'>('global')
+  const [verifying, setVerifying] = useState(false)
 
   const tab = (id: 'global' | 'friends', label: string) => (
     <button
@@ -117,8 +140,9 @@ export default function LeaderboardScreen({ onChallenge }: { onChallenge: (f: Fr
       </div>
 
       <div className="flex-1 overflow-y-auto pb-24 px-4">
-        {view === 'global' ? <GlobalLeaderboard/> : <FriendsSection onChallenge={onChallenge}/>}
+        {view === 'global' ? <GlobalLeaderboard onVerify={() => setVerifying(true)}/> : <FriendsSection onChallenge={onChallenge}/>}
       </div>
+      {verifying && <VerifyModal onClose={() => setVerifying(false)}/>}
     </div>
   )
 }

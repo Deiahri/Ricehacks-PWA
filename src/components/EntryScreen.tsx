@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export const SLOGAN = 'Your best rep is your next rep'
+export const SLOGAN = 'Your Best Rep Is Your Next Rep'
 
 function GoogleG() {
   return (
@@ -50,7 +50,7 @@ export default function EntryScreen({ onContinue, auth }: { onContinue: () => vo
     try {
       await auth.onGoogle()
     } catch {
-      setError("Couldn't start Google sign-in. Check your connection and try again.")
+      setError("Couldn't Start Google Sign-In. Check Your Connection And Try Again.")
       setBusy(false)
     }
   }
@@ -84,15 +84,15 @@ export default function EntryScreen({ onContinue, auth }: { onContinue: () => vo
               style={{ background: '#ffffff', color: '#1a2b4a', border: '2.5px solid #c8d0e0', boxShadow: '0 6px 20px rgba(26,43,74,0.12)' }}
             >
               <GoogleG/>
-              {busy ? 'Opening Google…' : 'Continue with Google'}
+              {busy ? 'Opening Google…' : 'Continue With Google'}
             </button>
             {error
               ? <p className="font-game font-bold text-xs text-center" style={{ color: '#ff4b4b' }}>{error}</p>
-              : <p className="font-game text-xs text-center" style={{ color: '#7a8ba8' }}>Sign in to keep your reps, friends and BP.</p>}
+              : <p className="font-game text-xs text-center" style={{ color: '#7a8ba8' }}>Sign In To Keep Your Reps, Friends And BP</p>}
           </div>
         ) : (
           <p className="font-game font-black text-sm tracking-widest uppercase animate-pulse" style={{ color: '#4a90e2' }}>
-            {tapped ? 'Loading…' : 'Tap to continue'}
+            {tapped ? 'Loading…' : 'Tap To Continue'}
           </p>
         )}
       </div>

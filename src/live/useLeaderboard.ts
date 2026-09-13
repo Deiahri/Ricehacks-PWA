@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Equipped } from '../config/cosmetics'
 import { api } from './api'
+import { useProfile } from './ProfileProvider'
 
 /** One person on the global leaderboard: their best single set, any exercise or length (null = no sets yet). */
 export interface GlobalEntry {
@@ -19,12 +20,16 @@ export interface GlobalEntry {
 
 export interface GlobalBoard {
   entries: GlobalEntry[]
-  /** My rank, even when I'm outside the top of the list (null before I pick a username). */
-  me: { rank: number; bestScore: number | null } | null
+  /**
+   * My rank, even when I'm outside the top of the list (null before I pick a username). verified: false = I'm not on
+   * the board until I verify my identity (rank is then null).
+   */
+  me: { rank: number | null; bestScore: number | null; verified?: boolean } | null
 }
 
-/** Everyone on the app, ranked by best set score (GET /api/leaderboard), fetched when the caller mounts. */
+/** Verified players, ranked by best set score (GET /api/leaderboard): fetched on mount and again when I verify. */
 export function useGlobalLeaderboard() {
+  const verified = useProfile().profile?.verified
   const [board, setBoard] = useState<GlobalBoard | null>(null)
   const [failed, setFailed] = useState(false)
   const reload = useCallback(() => {
@@ -33,6 +38,6 @@ export function useGlobalLeaderboard() {
       () => setFailed(true),
     )
   }, [])
-  useEffect(() => { reload() }, [reload])
+  useEffect(() => { reload() }, [reload, verified])
   return { board, failed, reload }
 }

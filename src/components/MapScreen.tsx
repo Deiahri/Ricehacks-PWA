@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ImportedFlameIcon from '../imports/FlameIcon/index'
 import CharacterSprite from './CharacterSprite'
+import UnverifiedTag from './UnverifiedTag'
 import type { Player } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
 import { skinColors } from '../config/appearance'
@@ -28,6 +29,7 @@ export function toPlayer(p: RemoteBrief & { username?: string | null }, me: Play
     appearance: { ...me.appearance, ...skinColors(p.skin), shirt: p.shirt },
     skinTone: p.skin ?? null,
     equipment: p.equipped ?? {},
+    verified: p.verified ?? null,
   }
 }
 
@@ -95,8 +97,8 @@ function StarIcon({ reached = false, size = 34 }: { reached?: boolean; size?: nu
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <path
         d="M12 2l2.9 6.26 6.86.72-5.12 4.6 1.44 6.74L12 17.6 5.92 20.32l1.44-6.74L2.24 8.98l6.86-.72z"
-        fill={reached ? '#ffd700' : '#d8dee9'}
-        stroke={reached ? '#e0a800' : '#c8d0e0'}
+        fill={reached ? '#ffd700' : '#dcebff'}
+        stroke={reached ? '#e0a800' : ACCENT}
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
@@ -155,6 +157,7 @@ function PlayerPopover({ player, onClose, onBattle }: PopoverProps) {
               <span className="text-xs font-game font-bold px-2 py-0.5 rounded-full text-white" style={{ background: color }}>
                 Lvl {player.level}
               </span>
+              <UnverifiedTag verified={player.verified}/>
             </div>
             <div className="text-[10px] font-game mt-0.5" style={{ color: '#7a8ba8' }}>{player.wins}W – {player.losses}L</div>
           </div>
@@ -203,7 +206,18 @@ function StreakStrip({ me }: { me: Player }) {
 
   return (
     <div style={{ transform: 'scale(1.2)', transformOrigin: 'top center' }}>
-    <div className="anim-fade-up relative flex items-center" style={{ animationDelay: '0.1s' }}>
+    {/* One blue capsule around the avatar, the track and the star */}
+    <div
+      className="anim-fade-up relative flex items-center"
+      style={{
+        animationDelay: '0.1s',
+        padding: '4px 30px 4px 4px',
+        borderRadius: 999,
+        background: ACCENT_BG,
+        border: `3px solid ${color}`,
+        boxShadow: `0 6px 16px ${color}40`,
+      }}
+    >
       {/* Player profile circle - fixed to left end of pill, overlapping left edge */}
       <div
         className="relative z-20 flex-shrink-0 flex items-center justify-center overflow-hidden"
@@ -225,11 +239,11 @@ function StreakStrip({ me }: { me: Player }) {
       <div
         style={{
           position: 'relative',
-          width: 230,
+          width: 210,
           height: 32,
           borderRadius: 16,
-          background: 'rgba(255,255,255,0.92)',
-          border: '2px solid #c8d0e0',
+          background: '#dcebff',
+          border: '2px solid #b8d4f5',
           backdropFilter: 'blur(10px)',
           marginLeft: -14,
         }}
@@ -289,8 +303,8 @@ function StreakStrip({ me }: { me: Player }) {
             width: 22,
             height: 22,
             borderRadius: '50%',
-            background: 'rgba(255,255,255,0.35)',
-            border: '2px solid #c8d0e0',
+            background: 'rgba(255,255,255,0.7)',
+            border: '2px solid #9cc2ef',
             zIndex: 10,
           }}
         />
@@ -322,7 +336,7 @@ function StreakStrip({ me }: { me: Player }) {
               fontWeight: 900,
               fontSize: 16,
               lineHeight: 1,
-              color: reached ? '#7a4f00' : '#8a94a6',
+              color: reached ? '#7a4f00' : ACCENT,
             }}
           >
             {me.level + 1}

@@ -15,8 +15,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'CV Exercise',
-        short_name: 'CV Exercise',
+        name: 'NextRep',
+        short_name: 'NextRep',
         description: 'Counts your reps and scores your form. Runs on-device; video never leaves the phone.',
         display: 'standalone',
         orientation: 'portrait',
