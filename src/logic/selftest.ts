@@ -7,6 +7,7 @@
 import { EXERCISES, Exercise, ExerciseName } from './exercises';
 import { Pose, SIDES, Vec } from './pose';
 import { avgForm, formatClock, repQuality, totalScore } from '../game/scoring';
+import { WHEEL, XP_PERFECT_AT, clampGoal, goalPct, repXpLabel, wedgeArc, xpForRep, xpForScores } from '../game/xp';
 import { ComboTracker, type ComboEvent } from '../game/combo';
 import { DURATIONS } from '../game/types';
 import { COSMETICS, wornItems } from '../config/cosmetics';
@@ -219,6 +220,13 @@ const UNIT_CHECKS: [string, boolean][] = [
   ['avgForm', avgForm([80, 90]) === 85 && avgForm([]) === 0],
   ['formatClock', formatClock(125) === '2:05' && formatClock(0.2) === '0:01' && formatClock(-3) === '0:00'],
   ['15 s sets are offered', (DURATIONS as readonly number[]).includes(15)],
+  // Weekly XP (src/game/xp.ts; the server mirrors it)
+  ['xp: 2 for a green rep, else 1', xpForRep(80) === 2 && xpForRep(79.9) === 1 && xpForRep(0) === 1 && XP_PERFECT_AT === 80],
+  ['xp: a set sums its reps', xpForScores([100, 80, 50, 10]) === 6 && xpForScores([]) === 0],
+  ['xp: labels', repXpLabel(95) === 'Perfect!' && repXpLabel(60) === 'Nice rep'],
+  ['goal: clamped to 10–1000 and rounded', clampGoal(3) === 10 && clampGoal(5000) === 1000 && clampGoal(47.4) === 47 && clampGoal(NaN) === 10],
+  ['goal: progress capped at 100%', goalPct(41, 40) === 100 && goalPct(10, 40) === 25 && goalPct(5, null) === 0],
+  ['wheel: wedges tile the circle', WHEEL.reduce((n, w) => n + w.weight, 0) === 100 && wedgeArc('saver1')[0] === 0 && wedgeArc('bp50')[1] === 360],
   ...comboChecks(),
   ...coachChecks(),
   ...cosmeticChecks(),

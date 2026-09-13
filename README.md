@@ -2,7 +2,7 @@
 
 A fitness battle game: find nearby players on the map, battle them with real-world workouts, and track progress and rankings. Squat and push-up reps are counted and form-scored entirely in the browser (the camera runs in the Battle flow's Workout Recording step). It's built for iPhone Safari and installable to the home screen. Video never leaves the phone.
 
-The game screens come from a Figma Make design. Battles, workouts, rep counting, scoring, accounts, friends, the global leaderboard, notifications and the profile are real. The Progress screen still uses mock data.
+The game screens come from a Figma Make design. Battles, workouts, rep counting, scoring, accounts, friends, the global leaderboard, notifications, the profile and the Progress screen are real.
 
 Every launch opens on the entry screen (NR logo, "Your best rep is your next rep", tap to continue), then Google sign-in, then a required username pick.
 
@@ -68,6 +68,10 @@ The Map tab is a real map (MapLibre GL + free OpenFreeMap tiles, restyled in `sr
 - After one session online, it works offline.
 - `?delegate=cpu` at the end of the URL forces CPU inference (useful if the GPU path misbehaves).
 
+## Weekly goal, XP and levels
+
+Right after picking a username, a new account picks a weekly XP goal (10–100 on the slider, or any number up to 1000). Every counted rep in a set that earned BP is 1 XP and a rep at 80+ form (the green "Great!") is 2 — a small "+2 Perfect!" / "+1 Nice rep" pops up on each rep during a set. The week runs Monday→Sunday in the phone's time zone and the goal is cumulative, so it can be hit on any mix of days. Reaching it is a level-up: the map's level bar fills as the week goes, the star turns gold, and a reward wheel comes up (1- or 2-day streak saver, +10/+20/+50 BP, or a shop item). A streak saver keeps an unfinished week open one more day past Sunday. The Progress tab shows each week's days rolling up into its total, the week streak and banked savers; the profile shows this week's XP against the goal next to the avatar (tap to change it). The server owns all of it (`GET /api/me`, `POST /api/goal`, `GET /api/progress`, `POST /api/reward/spin` in the backend README).
+
 ## Layout
 
 | Path | What |
@@ -76,12 +80,13 @@ The Map tab is a real map (MapLibre GL + free OpenFreeMap tiles, restyled in `sr
 | `src/components/` | Game screens from the Figma Make design: Map, Progress, Ranks, Alerts, Profile, Battle flow |
 | `src/components/CameraFeed.tsx` | Live camera + pose skeleton; hands every pose frame to the rep engine |
 | `src/components/ChallengeOverlays.tsx` | Incoming request modal, "waiting for…" card, toast |
-| `src/game/` | Session config, scoring, `useRepSession` (frames → reps inside the countdown/timer window), `useChallenge` (client side of the battle protocol) |
+| `src/game/` | Session config, scoring, `useRepSession` (frames → reps inside the countdown/timer window), `useChallenge` (client side of the battle protocol), `xp.ts` (weekly XP rules and the reward wheel, mirroring the server) |
 | `src/imports/` | Figma-exported icons, sprite SVG paths and item PNGs |
 | `src/logic/` | Rep state machine + form scoring, copied verbatim from `CV-Exercise/mobile/src/logic/` |
 | `src/camera/` | Camera stream, MediaPipe loader (GPU → CPU fallback), per-frame pose hook |
 | `src/live/` | Live map: stylized MapLibre map, GPS + compass hook, WebSocket presence hook, `LiveProvider` (one socket for the whole app). Also `ProfileProvider` (account, friends, notifications), `credential.ts` (Clerk token or device id) and `useLeaderboard.ts` |
 | `src/components/EntryScreen.tsx`, `ClerkGate.tsx` | Launch screen and the Google sign-in gate |
 | `src/components/AvatarEditor.tsx` | Skin tone swatches and the shirt colour wheel (`src/config/appearance.ts`) |
+| `src/components/GoalPicker.tsx`, `RewardWheelModal.tsx` | The weekly XP goal (asked once after the username, editable from the profile and Progress) and the spin owed when a week's goal is met |
 | `public/models/` | `pose_landmarker_full.task` / `pose_landmarker_lite.task` |
 | `vite.config.ts` | PWA manifest + service worker (app shell precached; wasm + models cached on first use) |

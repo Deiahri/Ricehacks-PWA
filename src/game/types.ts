@@ -44,6 +44,8 @@ export interface SideResult extends RemoteBrief {
   repScores: number[]
   /** Battle points this side earned (0 without an account). */
   bpAwarded?: number
+  /** Weekly XP this side earned: 1 per rep, 2 per perfect rep; 0 for a forfeiter. */
+  xpAwarded?: number
 }
 
 /** What a fighter's worn items do in a battle (the server's battle-effects.mjs loadoutOf). */

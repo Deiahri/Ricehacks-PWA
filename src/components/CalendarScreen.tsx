@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import CharacterSprite from './CharacterSprite'
+import GoalPicker from './GoalPicker'
 import UnverifiedTag from './UnverifiedTag'
 import WorkoutDetail from './WorkoutDetail'
 import { ACCENT, ACCENT_BG } from '../theme'
 import { skinColors } from '../config/appearance'
 import type { Equipped } from '../config/cosmetics'
 import { EXERCISE_OPTIONS } from '../game/types'
+import { goalPct } from '../game/xp'
 import { ApiError } from '../live/api'
+import { useProgress, type ProgressDay, type ProgressWeek } from '../live/useProgress'
 import { useWorkoutHistory, type WorkoutEntry } from '../live/useWorkoutHistory'
 import { useRecap, type Trend } from '../live/useWorkoutInsights'
 import { useProfile, type Friend } from '../live/ProfileProvider'
@@ -14,26 +17,22 @@ import { useProfile, type Friend } from '../live/ProfileProvider'
 type DayState = 'trained' | 'rest' | 'missed' | 'future'
 
 interface DayData {
-  date: number
+  date: string
+  /** Day of the month. */
+  num: number
+  xp: number
   state: DayState
 }
 
-function buildMonth(): DayData[] {
-  const days: DayData[] = []
-  const offset = 2 // Sept 2026 starts Tuesday
-  for (let i = 0; i < offset; i++) days.push({ date: 0, state: 'future' })
-  const trained = [1, 2, 4, 5, 7, 8, 9, 11]
-  const missed  = [3, 6, 10]
-  for (let d = 1; d <= 30; d++) {
-    if (d > 12)             days.push({ date: d, state: 'future' })
-    else if (trained.includes(d)) days.push({ date: d, state: 'trained' })
-    else if (missed.includes(d))  days.push({ date: d, state: 'missed' })
-    else                    days.push({ date: d, state: 'rest' })
-  }
-  return days
+/** A day's state from its XP and the week it belongs to: rest days only count as missed once the week is lost. */
+function dayState(d: ProgressDay, week: ProgressWeek, today: string): DayState {
+  if (d.date > today) return 'future'
+  if (d.xp > 0) return 'trained'
+  return week.status === 'missed' ? 'missed' : 'rest'
 }
 
-const MONTH_DAYS = buildMonth()
+const dayOfMonth = (iso: string) => Number(iso.slice(8, 10))
+const monthOf = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { month: 'short' })
 
 function FlameIcon({ filled = true, size = 18 }: { filled?: boolean; size?: number }) {
   return (
@@ -48,10 +47,7 @@ function FlameIcon({ filled = true, size = 18 }: { filled?: boolean; size?: numb
   )
 }
 
-function DayCell({ day }: { day: DayData }) {
-  if (day.date === 0) return <div/>
-  const isToday = day.date === 12
-
+function DayCell({ day, isToday }: { day: DayData; isToday: boolean }) {
   const bg: Record<DayState, string> = {
     trained: '#f0fff0',
     missed:  '#fff0f0',
@@ -68,6 +64,7 @@ function DayCell({ day }: { day: DayData }) {
   return (
     <div
       className="flex flex-col items-center justify-center rounded-xl py-1.5 gap-0.5"
+      title={day.xp ? `${day.xp} XP` : undefined}
       style={{
         background: isToday ? '#eff5ff' : bg[day.state],
         border: `2px solid ${isToday ? '#4a90e2' : border[day.state]}`,
@@ -78,58 +75,166 @@ function DayCell({ day }: { day: DayData }) {
         className="font-game font-bold text-xs leading-none"
         style={{ color: isToday ? '#4a90e2' : day.state === 'future' ? '#c8d0e0' : '#1a2b4a' }}
       >
-        {day.date}
+        {day.num}
       </span>
-      {day.state === 'trained' && <FlameIcon filled size={14}/>}
+      {day.state === 'trained' && (
+        <span className="flex items-center gap-0.5">
+          <FlameIcon filled size={14}/>
+          <span className="font-game font-black text-[10px] leading-none" style={{ color: '#3d9100' }}>{day.xp}</span>
+        </span>
+      )}
       {day.state === 'missed' && (
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
           <path d="M2 2l8 8M10 2L2 12" stroke="#ff4b4b" strokeWidth="2" strokeLinecap="round"/>
         </svg>
       )}
-      {day.state === 'rest' && day.date <= 12 && (
+      {day.state === 'rest' && (
         <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#c8d0e0' }}/>
       )}
     </div>
   )
 }
 
+/** The week's total against its goal: ✓ met (🛟 when a saver helped), ✗ missed, or how far along it is. */
+function WeekCell({ week }: { week: ProgressWeek }) {
+  const met = week.status === 'met'
+  const missed = week.status === 'missed'
+  const color = met ? '#3d9100' : missed ? '#ff4b4b' : week.current ? ACCENT : '#2f6fc0'
+  const bg = met ? '#f0fff0' : missed ? '#fff0f0' : ACCENT_BG
+  return (
+    <div
+      className="flex flex-col items-center justify-center rounded-xl py-1 gap-0.5"
+      title={`${week.xp} of ${week.goal} XP`}
+      style={{ background: bg, border: `2px solid ${color}55`, minHeight: 52 }}
+    >
+      <span className="font-game font-black text-[11px] leading-none" style={{ color }}>
+        {met ? `${week.xp} ✓` : missed ? `${week.xp} ✗` : `${week.xp}/${week.goal}`}
+      </span>
+      <span className="text-[10px] leading-none" style={{ color }}>
+        {week.extraDays > 0 ? '🛟' : met ? '⭐' : missed ? '' : week.current ? 'now' : ''}
+      </span>
+    </div>
+  )
+}
+
+/** The bar every screen uses for "this week's XP against the goal". */
+export function GoalBar({ xp, goal, height = 10 }: { xp: number; goal: number | null; height?: number }) {
+  const pct = goalPct(xp, goal)
+  return (
+    <div className="w-full rounded-full overflow-hidden" style={{ background: '#dcebff', height }}>
+      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct >= 100 ? '#58cc02' : '#ffc300', transition: 'width .5s cubic-bezier(.2,.8,.2,1)' }}/>
+    </div>
+  )
+}
+
+const WEEKS_SHOWN = 6
+
 function CalendarView() {
-  const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+  const { profile } = useProfile()
+  const { data, failed } = useProgress()
+  const [editingGoal, setEditingGoal] = useState(false)
+  const weekDays = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+  const goal = profile?.weeklyGoal ?? data?.goal ?? null
+  const weekXp = profile?.weekXp ?? 0
+  const ext = profile?.extension ?? null
+  const weeks = data?.weeks.slice(-WEEKS_SHOWN) ?? []
+  const note = (text: string) => <p className="text-xs font-game text-center py-6" style={{ color: '#7a8ba8' }}>{text}</p>
+
   return (
     <div className="px-4">
-      <div className="flex items-center justify-between mb-4">
-        <span className="font-game font-black text-xl" style={{ color: '#1a2b4a' }}>September 2026</span>
-        <div
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-          style={{ background: '#fff8ec', border: '2px solid #ffd093' }}
-        >
-          <div className="anim-flame"><FlameIcon size={16}/></div>
-          <span className="font-game font-black text-sm" style={{ color: '#ff9600' }}>4 Day Streak</span>
+      {/* This week */}
+      <div className="rounded-2xl p-4 mb-4" style={{ background: profile?.weekMet ? '#f0fff0' : ACCENT_BG, border: `2px solid ${profile?.weekMet ? '#58cc02' : '#b8d4f5'}` }}>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="min-w-0">
+            <div className="font-game font-black text-lg leading-tight" style={{ color: '#1a2b4a' }}>
+              {goal === null ? 'No weekly goal yet' : profile?.weekMet ? 'Goal reached! ⭐' : `${weekXp} / ${goal} XP`}
+            </div>
+            <div className="font-game text-[11px]" style={{ color: '#7a8ba8' }}>
+              {goal === null ? 'Set one to start a streak' : profile?.weekMet ? `${weekXp} XP this week · level ${profile?.level ?? data?.level ?? 1}` : `${goal - weekXp} more by Sunday · any way you like`}
+            </div>
+          </div>
+          <button
+            onClick={() => setEditingGoal(true)}
+            disabled={!profile}
+            className="flex-shrink-0 px-3 py-1.5 rounded-full font-game font-black text-xs text-white transition-transform active:scale-95 disabled:opacity-50"
+            style={{ background: ACCENT, boxShadow: `0 2px 6px ${ACCENT}55` }}
+          >
+            {goal === null ? 'Set goal' : 'Change'}
+          </button>
+        </div>
+        <GoalBar xp={weekXp} goal={goal}/>
+        {ext && (
+          <div className="mt-2 font-game font-bold text-[11px]" style={{ color: '#2f6fc0' }}>
+            🛟 Last week is still open: {ext.xp} / {ext.goal} XP with {ext.daysLeft} more {ext.daysLeft === 1 ? 'day' : 'days'} to reach it
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-game font-black text-xl" style={{ color: '#1a2b4a' }}>Weekly streak</span>
+        <div className="flex items-center gap-2">
+          {(data?.saverDays ?? profile?.saverDays ?? 0) > 0 && (
+            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full font-game font-black text-xs" style={{ background: ACCENT_BG, border: `2px solid #b8d4f5`, color: '#2f6fc0' }}>
+              🛟 ×{data?.saverDays ?? profile?.saverDays}
+            </div>
+          )}
+          <div
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+            style={{ background: '#fff8ec', border: '2px solid #ffd093' }}
+          >
+            <div className={data && data.streak > 0 ? 'anim-flame' : ''}><FlameIcon size={16} filled={!!data && data.streak > 0}/></div>
+            <span className="font-game font-black text-sm" style={{ color: '#ff9600' }}>
+              {data ? `${data.streak} Week Streak` : '…'}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 mb-1">
-        {weekDays.map(d => (
-          <div key={d} className="text-center text-[10px] font-game font-bold py-1" style={{ color: '#7a8ba8' }}>{d}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {MONTH_DAYS.map((day, i) => <DayCell key={i} day={day}/>)}
-      </div>
+      {failed ? note("Couldn't load your progress.")
+        : !data ? note('Loading…')
+        : goal === null ? note('Your weeks show up here once you set a goal.')
+        : weeks.length === 0 ? note('Your first week starts now. Finish a set and it lights up.')
+        : (
+          <>
+            <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'repeat(7, 1fr) 52px' }}>
+              {weekDays.map(d => (
+                <div key={d} className="text-center text-[10px] font-game font-bold py-1" style={{ color: '#7a8ba8' }}>{d}</div>
+              ))}
+              <div className="text-center text-[10px] font-game font-bold py-1" style={{ color: '#7a8ba8' }}>Week</div>
+            </div>
+            <div className="flex flex-col gap-1">
+              {weeks.map(week => (
+                <div key={week.start}>
+                  {(week === weeks[0] || dayOfMonth(week.start) <= 7) && (
+                    <div className="font-game font-bold text-[10px] pl-1 mb-0.5" style={{ color: '#9aaac4' }}>{monthOf(week.start)}</div>
+                  )}
+                  <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, 1fr) 52px' }}>
+                    {week.days.map(d => (
+                      <DayCell key={d.date} isToday={d.date === data.today}
+                        day={{ date: d.date, num: dayOfMonth(d.date), xp: d.xp, state: dayState(d, week, data.today) }}/>
+                    ))}
+                    <WeekCell week={week}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-4 mt-4 justify-center flex-wrap">
+              {([
+                ['#58cc02', 'Trained'],
+                ['#ff4b4b', 'Missed'],
+                ['#c8d0e0', 'Rest'],
+                ['#2f6fc0', '🛟 Saver used'],
+              ] as [string, string][]).map(([color, label]) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }}/>
+                  <span className="text-[11px] font-game" style={{ color: '#7a8ba8' }}>{label}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
-      <div className="flex items-center gap-5 mt-4 justify-center">
-        {([
-          ['#58cc02', 'Trained'],
-          ['#ff4b4b', 'Missed'],
-          ['#c8d0e0', 'Rest'],
-        ] as [string, string][]).map(([color, label]) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }}/>
-            <span className="text-[11px] font-game" style={{ color: '#7a8ba8' }}>{label}</span>
-          </div>
-        ))}
-      </div>
-
+      {editingGoal && <GoalPicker mode="edit" onClose={() => setEditingGoal(false)}/>}
     </div>
   )
 }

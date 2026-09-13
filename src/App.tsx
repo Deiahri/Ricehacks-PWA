@@ -6,6 +6,7 @@ import NotificationsScreen from './components/NotificationsScreen'
 import ProfileScreen from './components/ProfileScreen'
 import BattleFlow from './components/BattleFlow'
 import InstallHint from './components/InstallHint'
+import GoalPicker from './components/GoalPicker'
 import UsernamePicker from './components/UsernamePicker'
 import EntryScreen from './components/EntryScreen'
 import { CLERK_KEY, ClerkGate } from './components/ClerkGate'
@@ -306,6 +307,8 @@ function Game() {
   const { profile, friends, inbox } = account
   // No username yet: picking one is required. While the server can't be reached, a cached name is enough to play.
   const needsName = account.status === 'ready' ? !profile?.username : account.status !== 'no-db' && !account.username
+  // Then a weekly goal (strictly null: an older server leaves the field out and mustn't block the app).
+  const needsGoal = account.status === 'ready' && profile?.weeklyGoal === null
 
   const me: Player = {
     ...ME,
@@ -384,6 +387,7 @@ function Game() {
   }
 
   if (needsName) return <UsernamePicker mode="first"/>
+  if (needsGoal) return <GoalPicker mode="first"/>
 
   return (
     <>

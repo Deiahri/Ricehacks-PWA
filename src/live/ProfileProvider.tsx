@@ -18,6 +18,26 @@ export interface Profile {
   owned: string[]
   /** Identity verified (Persona). Always true while the server runs without verification; absent from older servers. */
   verified?: boolean
+  /** Weekly XP goal (src/game/xp.ts); null until chosen (the onboarding step). Absent from older servers. */
+  weeklyGoal?: number | null
+  /** XP this week (Monday→Sunday in my zone) and whether that already hit the goal (= a level-up). */
+  weekXp?: number
+  weekMet?: boolean
+  /** Banked streak-saver days, from the reward wheel. */
+  saverDays?: number
+  /** A met week whose wheel hasn't been spun yet. */
+  pendingReward?: boolean
+  /** Last week, while a saver day keeps it open: one more day to reach its goal. */
+  extension?: { weekStart: string; xp: number; goal: number; daysLeft: number } | null
+}
+
+/** What the reward wheel paid (POST /api/reward/spin). */
+export interface WheelReward {
+  id: string
+  kind: 'saver' | 'bp' | 'item'
+  days?: number
+  bp?: number
+  itemId?: string
 }
 
 export interface Friend extends Profile {
@@ -65,6 +85,10 @@ interface Account {
   setAppearance: (look: { skin?: string; shirt?: string }) => Promise<void>
   buy: (itemId: string) => Promise<void>
   equip: (slot: Slot, itemId: string | null) => Promise<void>
+  /** Weekly XP goal; the phone's zone goes along so the week is counted in local time. */
+  setWeeklyGoal: (goal: number) => Promise<void>
+  /** Spin the wheel owed for a met week; the server picks and pays the reward. */
+  spinWheel: () => Promise<WheelReward>
   /** 'accepted' when they had already asked you. */
   sendRequest: (username: string) => Promise<'sent' | 'accepted'>
   respond: (username: string, accept: boolean) => Promise<void>
@@ -159,6 +183,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const equip = useCallback(async (slot: Slot, itemId: string | null) => {
     setProfile(await api<Profile>('POST', '/api/equip', { slot, itemId }))
   }, [setProfile])
+  const setWeeklyGoal = useCallback(async (goal: number) => {
+    setProfile(await api<Profile>('POST', '/api/goal', { goal, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }))
+  }, [setProfile])
+  const spinWheel = useCallback(async () => {
+    const { reward, profile: p } = await api<{ reward: WheelReward; profile: Profile }>('POST', '/api/reward/spin')
+    setProfile(p)
+    return reward
+  }, [setProfile])
   const sendRequest = useCallback(async (to: string) => {
     const { status: s } = await api<{ status: 'sent' | 'accepted' }>('POST', '/api/friends/requests', { username: to })
     loadFriends()
@@ -179,8 +211,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     username: username ?? (status === 'ready' ? null : storage.get(NAME_KEY) || null),
     friends,
     inbox,
-    refresh, claimUsername, setAppearance, buy, equip, sendRequest, respond, markRead,
-  }), [status, profile, username, friends, inbox, refresh, claimUsername, setAppearance, buy, equip, sendRequest, respond, markRead])
+    refresh, claimUsername, setAppearance, buy, equip, setWeeklyGoal, spinWheel, sendRequest, respond, markRead,
+  }), [status, profile, username, friends, inbox, refresh, claimUsername, setAppearance, buy, equip, setWeeklyGoal, spinWheel, sendRequest, respond, markRead])
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>
 }

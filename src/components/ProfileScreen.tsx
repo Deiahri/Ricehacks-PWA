@@ -2,6 +2,7 @@ import { useState } from 'react'
 import svgPaths from '../imports/GameAppDesignOverview/svg-8d6d6pxw63'
 import AvatarEditor from './AvatarEditor'
 import CharacterSprite from './CharacterSprite'
+import GoalPicker from './GoalPicker'
 import Inventory from './Inventory'
 import ShopScreen from './ShopScreen'
 import ShopSign from './ShopSign'
@@ -10,6 +11,7 @@ import UsernamePicker from './UsernamePicker'
 import VerifyModal from './VerifyModal'
 import type { Player } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
+import { goalPct } from '../game/xp'
 import { canSignOut, signOut } from '../live/credential'
 import { useProfile } from '../live/ProfileProvider'
 import { useGlobalLeaderboard } from '../live/useLeaderboard'
@@ -60,6 +62,7 @@ export default function ProfileScreen({ me }: Props) {
   const { profile } = useProfile()
   const [renaming, setRenaming] = useState(false)
   const [editingLook, setEditingLook] = useState(false)
+  const [editingGoal, setEditingGoal] = useState(false)
   const [shopOpen, setShopOpen] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const { board } = useGlobalLeaderboard()
@@ -68,6 +71,9 @@ export default function ProfileScreen({ me }: Props) {
   const losses  = me.losses
   const winRate = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0
   const unverified = profile?.verified === false
+  const goal = profile?.weeklyGoal ?? null
+  const weekXp = profile?.weekXp ?? 0
+  const pct = goalPct(weekXp, goal)
   // Global rank by best set score; no sets yet (or unverified) = unranked.
   const rank    = board?.me && board.me.bestScore !== null ? board.me.rank : null
 
@@ -150,6 +156,27 @@ export default function ProfileScreen({ me }: Props) {
               <span style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 18, lineHeight: '24px', color: '#b45309' }}>{me.bp}</span>
               <span style={{ fontFamily: "'Nunito:Bold',sans-serif", fontWeight: 700, fontSize: 14, lineHeight: '20px', color: '#d97706' }}>BP</span>
             </div>
+            {/* Weekly XP goal — tap to change it */}
+            {goal !== null && (
+              <button
+                onClick={() => setEditingGoal(true)}
+                aria-label="Change weekly goal"
+                className="w-full max-w-[176px] px-3 py-2 rounded-[16px] mt-1 text-left transition-transform active:scale-95"
+                style={{ background: profile?.weekMet ? '#f0fff0' : '#fff', border: `2.028px solid ${profile?.weekMet ? '#58cc02' : '#c8d0e0'}` }}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="whitespace-nowrap" style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 13, lineHeight: '18px', color: '#1a2b4a' }}>
+                    🎯 {weekXp} / {goal} XP
+                  </span>
+                  <span style={{ fontFamily: "'Nunito:Bold',sans-serif", fontWeight: 700, fontSize: 10, lineHeight: '14px', color: '#7a8ba8' }}>
+                    {profile?.weekMet ? 'done ✓' : 'this week ›'}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-2 rounded-full overflow-hidden" style={{ background: '#dcebff' }}>
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct >= 100 ? '#58cc02' : '#ffc300', transition: 'width .4s' }}/>
+                </div>
+              </button>
+            )}
           </div>
         </div>
 
@@ -193,6 +220,7 @@ export default function ProfileScreen({ me }: Props) {
       {shopOpen && <ShopScreen onClose={() => setShopOpen(false)}/>}
       {renaming && <UsernamePicker mode="rename" onClose={() => setRenaming(false)}/>}
       {editingLook && <AvatarEditor onClose={() => setEditingLook(false)}/>}
+      {editingGoal && <GoalPicker mode="edit" onClose={() => setEditingGoal(false)}/>}
       {verifying && <VerifyModal onClose={() => setVerifying(false)}/>}
     </div>
   )

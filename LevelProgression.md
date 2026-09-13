@@ -1,3 +1,5 @@
+> **Status (2026-09-13):** superseded. The progression shipped server-side with a user-set *weekly* XP goal instead of the fixed daily target below: see `src/game/xp.ts`, `GoalPicker.tsx`, `RewardWheelModal.tsx`, `CalendarScreen.tsx`, and the backend's `progress.mjs` / `db.mjs`. Kept for the reward-wheel and streak-saver rationale.
+
 # Level progression per week + updated points system
 
 ## Context
