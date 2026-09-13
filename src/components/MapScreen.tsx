@@ -87,7 +87,11 @@ function PlayerPopover({ player, onClose, onBattle }: PopoverProps) {
   const bg    = ACCENT_BG
 
   return (
-    <div className="absolute inset-0 flex items-end justify-center pb-24 z-50" onClick={onClose}>
+    <div
+      className="absolute inset-0 flex items-end justify-center z-50"
+      style={{ paddingBottom: 'calc(112px + env(safe-area-inset-bottom))' }}
+      onClick={onClose}
+    >
       <div
         className="anim-pop-in w-[340px] rounded-3xl overflow-hidden"
         style={{
@@ -346,7 +350,7 @@ export default function MapScreen({ me, onStartBattle }: Props) {
       />
 
       {/* Top HUD */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex flex-col items-center gap-9 px-4 pt-12 pointer-events-none">
+      <div className="absolute top-0 left-0 right-0 z-30 flex flex-col items-center gap-9 px-4 pt-(--top-gap) pointer-events-none">
         <div className="pointer-events-auto"><StreakStrip me={me}/></div>
         <div className="flex items-center gap-2">
           <div

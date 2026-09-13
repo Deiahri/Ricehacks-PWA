@@ -84,7 +84,7 @@ export default function ProfileScreen({ me }: Props) {
     <div className="absolute inset-0 overflow-y-auto" style={{ background: '#ffffff' }}>
 
       {/* ── Hero section ── */}
-      <div className="relative w-full" style={{ background: ACCENT_BG, borderBottom: '2.028px solid #c8d0e0', paddingTop: 56, paddingBottom: 24 }}>
+      <div className="relative w-full" style={{ background: ACCENT_BG, borderBottom: '2.028px solid #c8d0e0', paddingTop: 'var(--top-gap)', paddingBottom: 24 }}>
 
         {/* Rank line — compact, centered, just above the content */}
         <p className="text-center mb-4 whitespace-nowrap"

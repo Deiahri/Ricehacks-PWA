@@ -37,8 +37,11 @@ html, body, #root {
 
 .font-game { font-family: 'Nunito Variable', sans-serif; }
 
-/* Live map: lift MapLibre's attribution above the bottom nav. */
-.live-map .maplibregl-ctrl-bottom-right { bottom: calc(84px + env(safe-area-inset-bottom)); }
+/* Space above screen headers. On a real phone the content already starts below the status bar,
+   so only the safe-area inset (0 unless the page runs under the status bar) plus a small gap. */
+:root { --top-gap: calc(env(safe-area-inset-top) + 16px); }
+/* Framed desktop "phone" (App.tsx, ≥501px) keeps room for its pretend status bar. */
+@media (min-width: 501px) { :root { --top-gap: 56px; } }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

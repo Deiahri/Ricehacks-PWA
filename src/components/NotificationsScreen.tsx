@@ -45,7 +45,7 @@ export default function NotificationsScreen() {
 
   return (
     <div className="absolute inset-0 flex flex-col" style={{ background: '#ffffff' }}>
-      <div className="px-4 pt-14 pb-3 flex-shrink-0">
+      <div className="px-4 pt-(--top-gap) pb-3 flex-shrink-0">
         <h1 className="font-game font-black text-2xl" style={{ color: '#1a2b4a' }}>Notifications</h1>
       </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Map as MapLibre, Marker, AttributionControl, setWorkerUrl, type MarkerOptions } from 'maplibre-gl'
+import { Map as MapLibre, Marker, setWorkerUrl, type MarkerOptions } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 // MapLibre builds its worker URL at runtime, which Vite can't see; bundle the worker explicitly instead.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
@@ -93,7 +93,6 @@ export default function LiveMap({ me, position, heading, others, onSelect }: Pro
           keyboard: false,
         })
         instance.touchZoomRotate.disableRotation()
-        instance.addControl(new AttributionControl({ compact: true }), 'bottom-right')
         const m = instance
         // Put "me" ~65% down the screen like the old art, so more of what's ahead is visible.
         const pad = () => m.setPadding({ top: m.getContainer().clientHeight * 0.3, bottom: 0, left: 0, right: 0 })

@@ -65,7 +65,7 @@ function ExitButton({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       className="absolute z-20 flex items-center justify-center rounded-full transition-transform active:scale-90"
-      style={{ top: 16, right: 16, width: 34, height: 34, background: '#f5f7fb', border: '2px solid #c8d0e0' }}
+      style={{ top: 'var(--top-gap)', right: 16, width: 34, height: 34, background: '#f5f7fb', border: '2px solid #c8d0e0' }}
       aria-label="Exit"
     >
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -89,6 +89,12 @@ function useNow(active: boolean): number {
 
 // ===================== PRE-BATTLE ANIM (stays dramatic/dark) =====================
 
+// Fighters shrink with the viewport so both fit, clear of the VS, on short phone screens.
+const FIGHTER_H = 'clamp(120px, 24dvh, 224px)'
+const FIGHTER_SVG = { height: FIGHTER_H, width: `calc(${FIGHTER_H} * 0.5763)` } // sprite aspect 134 / 232.5
+const NAME_SIZE = 'clamp(20px, 3.4dvh, 28px)'
+const LEVEL_SIZE = 'clamp(16px, 2.8dvh, 24px)'
+
 function PreBattleAnim({ me, opponent, onNext }: { me: Player; opponent: Player; onNext: () => void }) {
   const [showVS, setShowVS] = useState(false)
   useEffect(() => { const t = setTimeout(() => setShowVS(true), 600); return () => clearTimeout(t) }, [])
@@ -106,7 +112,7 @@ function PreBattleAnim({ me, opponent, onNext }: { me: Player; opponent: Player;
       }}
     >
       {/* Header — bigger, darker, slams in */}
-      <div className="flex-shrink-0 pt-24 px-6 text-center relative z-10">
+      <div className="flex-shrink-0 px-6 text-center relative z-10" style={{ paddingTop: 'calc(var(--top-gap) + 24px)' }}>
         <div className="anim-slam font-game font-black text-2xl" style={{ color: '#1a2b4a', letterSpacing: '0.15em' }}>BATTLE REQUEST ACCEPTED</div>
       </div>
 
@@ -114,27 +120,23 @@ function PreBattleAnim({ me, opponent, onNext }: { me: Player; opponent: Player;
       <div className="flex-1 relative">
         {/* Opponent — top-left quadrant, biased left so its left edge sits on the text's left bound */}
         <div className="anim-slide-left absolute flex flex-col items-start" style={{ top: 'calc(4% - 10px)', left: 'calc(10% - 20px)' }}>
-          <div style={{ width: 160, height: 224, position: 'relative' }}>
-            <div style={{ position: 'absolute', bottom: 0, left: -10, transform: 'scale(2)', transformOrigin: 'bottom left' }}>
-              <CharacterSprite size="md" {...opponent.appearance} {...opponent.equipment}/>
-            </div>
+          <div style={{ marginLeft: -10 }}>
+            <CharacterSprite size="lg" svgStyle={FIGHTER_SVG} {...opponent.appearance} {...opponent.equipment}/>
           </div>
           <div className="text-left">
-            <div className="font-game font-black" style={{ color: '#1a2b4a', fontSize: 28 }}>{opponent.name}</div>
-            <div className="font-game font-bold" style={{ color: opColor, fontSize: 24 }}>Lvl {opponent.level}</div>
+            <div className="font-game font-black" style={{ color: '#1a2b4a', fontSize: NAME_SIZE }}>{opponent.name}</div>
+            <div className="font-game font-bold" style={{ color: opColor, fontSize: LEVEL_SIZE }}>Lvl {opponent.level}</div>
           </div>
         </div>
 
         {/* Me — bottom-right quadrant, biased right so its right edge sits on the text's right bound */}
         <div className="anim-slide-right absolute flex flex-col items-end" style={{ bottom: 'calc(6% - 10px)', right: 'calc(10% - 20px)' }}>
-          <div style={{ width: 160, height: 224, position: 'relative' }}>
-            <div style={{ position: 'absolute', bottom: 0, right: -10, transform: 'scale(2)', transformOrigin: 'bottom right' }}>
-              <CharacterSprite size="md" flip {...me.appearance} {...me.equipment}/>
-            </div>
+          <div style={{ marginRight: -10 }}>
+            <CharacterSprite size="lg" flip svgStyle={FIGHTER_SVG} {...me.appearance} {...me.equipment}/>
           </div>
           <div className="text-right">
-            <div className="font-game font-black" style={{ color: '#1a2b4a', fontSize: 28 }}>{me.name}</div>
-            <div className="font-game font-bold" style={{ color: meColor, fontSize: 24 }}>Lvl {me.level}</div>
+            <div className="font-game font-black" style={{ color: '#1a2b4a', fontSize: NAME_SIZE }}>{me.name}</div>
+            <div className="font-game font-bold" style={{ color: meColor, fontSize: LEVEL_SIZE }}>Lvl {me.level}</div>
           </div>
         </div>
       </div>
@@ -152,7 +154,7 @@ function PreBattleAnim({ me, opponent, onNext }: { me: Player; opponent: Player;
         </div>
       )}
 
-      <div className="flex-shrink-0 px-6 pb-14 relative z-10">
+      <div className="flex-shrink-0 px-6 relative z-10" style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
         <button
           className="w-full py-4 rounded-2xl font-game font-black text-white text-lg active:scale-95"
           style={{ background: 'linear-gradient(135deg,#ff9600,#e74c3c)', boxShadow: '0 8px 32px rgba(255,150,0,0.5)' }}
@@ -241,7 +243,8 @@ function SessionPicker({ isSolo, opponent, challenge, onStart, onExit }: {
     <div className="absolute inset-0 flex flex-col" style={{ background: '#ffffff' }}>
       <ExitButton onClick={onExit}/>
 
-      <div className="flex-shrink-0 pt-14 px-6 pb-4">
+      {/* pr-16 keeps the title clear of the exit button on the same row */}
+      <div className="flex-shrink-0 pt-(--top-gap) pl-6 pr-16 pb-4">
         <div className="font-game font-bold text-sm mb-1" style={{ color: '#7a8ba8' }}>{isSolo ? 'SOLO WORKOUT' : 'STEP 2 OF 4'}</div>
         <h1 className="font-game font-black text-2xl" style={{ color: '#1a2b4a' }}>{isSolo ? 'Pick a Workout' : 'Vote on the Challenge'}</h1>
         {!isSolo && (
@@ -310,7 +313,7 @@ function SessionPicker({ isSolo, opponent, challenge, onStart, onExit }: {
         )}
       </div>
 
-      <div className="flex-shrink-0 px-6 py-6">
+      <div className="flex-shrink-0 px-6 pt-6" style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
         <button
           className="w-full py-4 rounded-2xl font-game font-black text-lg transition-all active:scale-95"
           style={{
@@ -477,8 +480,9 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
       <ExitButton onClick={exit}/>
 
       {/* Top: steps + timer */}
-      <div className="flex-shrink-0 px-4 pb-3" style={{ paddingTop: 68 }}>
-        <div className="flex items-center justify-between mb-3">
+      <div className="flex-shrink-0 px-4 pb-3" style={{ paddingTop: 'var(--top-gap)' }}>
+        {/* pr-10 keeps the timer clear of the exit button on the same row */}
+        <div className="flex items-center justify-between mb-3 pr-10">
           {isSolo
             ? <StepIndicator steps={['Pick', 'Record', 'Done']} current={phase === 'done' ? 2 : 1}/>
             : <StepIndicator steps={['Battle', 'Vote', 'Record', 'Result']} current={2}/>}
@@ -562,7 +566,7 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
 
       {/* Bottom */}
       {phase === 'done' ? (
-        <div className="flex-shrink-0 px-4 py-4">
+        <div className="flex-shrink-0 px-4 pt-4" style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
           <div className="rounded-2xl p-4 mb-3" style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}>
             <div className="font-game font-black text-base mb-3 text-center" style={{ color: '#1a2b4a' }}>
               {isSolo ? 'Workout Complete! 🎉' : opponentLeft ? `${opponentName} left the battle` : "Time's up! ⏱"}
@@ -607,7 +611,7 @@ function WorkoutRecording({ isSolo, config, opponentName, challenge, onNext, onE
           )}
         </div>
       ) : (
-        <div className="flex-shrink-0 px-4 py-4">
+        <div className="flex-shrink-0 px-4 pt-4" style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
           <button
             disabled
             className="w-full py-4 rounded-2xl font-game font-black text-xl"
@@ -762,7 +766,7 @@ function PostBattleResult({ me, opponent, result, onExit }: { me: Player; oppone
         </div>
       </div>
 
-      <div className="flex-shrink-0 px-6 py-6 w-full z-10">
+      <div className="flex-shrink-0 px-6 pt-6 w-full z-10" style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
         <button
           className="w-full py-4 rounded-2xl font-game font-black text-white text-lg active:scale-95"
           style={{ background: 'linear-gradient(135deg,#58cc02,#3d9100)', boxShadow: '0 8px 28px rgba(88,204,2,0.4)' }}

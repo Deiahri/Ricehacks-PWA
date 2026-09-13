@@ -256,13 +256,13 @@ function FriendProfile({ friend, rank, onClose }: { friend: Friend; rank: number
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto anim-fade-up" style={{ background: '#ffffff' }}>
       {/* Hero */}
-      <div className="relative w-full" style={{ background: bg, borderBottom: '2.028px solid #c8d0e0', paddingTop: 56, paddingBottom: 24 }}>
+      <div className="relative w-full" style={{ background: bg, borderBottom: '2.028px solid #c8d0e0', paddingTop: 'var(--top-gap)', paddingBottom: 24 }}>
         {/* Back button */}
         <button
           onClick={onClose}
           aria-label="Back"
           className="absolute flex items-center justify-center rounded-full transition-transform active:scale-90"
-          style={{ top: 16, left: 16, width: 34, height: 34, background: '#ffffffcc', border: '2px solid #c8d0e0' }}
+          style={{ top: 'var(--top-gap)', left: 16, width: 34, height: 34, background: '#ffffffcc', border: '2px solid #c8d0e0' }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <path d="M15 5l-7 7 7 7" stroke="#1a2b4a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
@@ -517,7 +517,6 @@ function LeaderboardView() {
 
 function LocalRow({ entry }: { entry: LeaderboardEntry & { rank: number } }) {
   const color = ACCENT
-  const bg    = ACCENT_BG
   return (
     <div
       className="flex items-center gap-3 px-3 py-2.5 rounded-2xl"
@@ -527,12 +526,7 @@ function LocalRow({ entry }: { entry: LeaderboardEntry & { rank: number } }) {
       }}
     >
       <RankBadge rank={entry.rank}/>
-      <div
-        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-        style={{ background: bg, border: `2px solid ${color}` }}
-      >
-        <CharacterSprite size="xs" shirt={entry.shirt}/>
-      </div>
+      <Avatar shirt={entry.shirt}/>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="font-game font-bold text-sm truncate" style={{ color: '#1a2b4a' }}>{entry.name}</span>
@@ -556,7 +550,7 @@ function LocalRow({ entry }: { entry: LeaderboardEntry & { rank: number } }) {
 function ExpandedList({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="absolute inset-0 z-30 overflow-y-auto anim-fade-up" style={{ background: '#ffffff' }}>
-      <div className="px-4 pt-14 pb-3 flex items-center gap-3">
+      <div className="px-4 pt-(--top-gap) pb-3 flex items-center gap-3">
         <button
           onClick={onClose}
           aria-label="Back"
@@ -624,7 +618,7 @@ function LocalLeaderboard({
 export default function CalendarScreen() {
   return (
     <div className="absolute inset-0 flex flex-col" style={{ background: '#ffffff' }}>
-      <div className="px-4 pt-14 pb-3 flex-shrink-0">
+      <div className="px-4 pt-(--top-gap) pb-3 flex-shrink-0">
         <h1 className="font-game font-black text-2xl mb-1" style={{ color: '#1a2b4a' }}>Progress</h1>
       </div>
       <div className="flex-1 overflow-y-auto pb-24">
