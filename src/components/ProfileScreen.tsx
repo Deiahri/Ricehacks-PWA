@@ -160,7 +160,7 @@ export default function ProfileScreen({ me }: Props) {
           {/* Tap the avatar (or its pencil) to change skin tone and shirt colour */}
           <div className="relative flex-shrink-0 rounded-[16px] overflow-visible"
             onClick={() => { if (profile) setEditingLook(true) }}
-            style={{ width: 160, height: 200, background: '#fff', border: `2.028px solid ${color}`, boxShadow: `0 6px 12px ${color}33`, isolation: 'isolate', zIndex: 1, cursor: profile ? 'pointer' : 'default' }}>
+            style={{ width: 160, height: 200, background: '#fff', border: `3px solid ${color}`, boxShadow: `0 6px 12px ${color}33`, isolation: 'isolate', zIndex: 1, cursor: profile ? 'pointer' : 'default' }}>
             <div className="absolute inset-0 flex items-end justify-center overflow-visible">
               <div style={{ transform: 'scale(1.25)', transformOrigin: 'bottom center' }}>
                 <CharacterSprite size="lg" animate {...me.appearance} equipped={me.equipment}/>
