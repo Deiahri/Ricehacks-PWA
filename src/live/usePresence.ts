@@ -22,6 +22,10 @@ export interface RemotePlayer {
   busy?: boolean
   /** False = verification is on and they haven't verified; null = no account yet. */
   verified?: boolean | null
+  /** What they just said; the server clears it ~7 s after they said it. */
+  chat?: string | null
+  /** When they said it, so a new message replays the bubble animation. */
+  chatAt?: number
 }
 
 /** Any non-snapshot message from the presence server (challenge traffic, save acks). */

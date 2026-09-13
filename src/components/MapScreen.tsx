@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import ImportedFlameIcon from '../imports/FlameIcon/index'
 import CharacterSprite from './CharacterSprite'
+import ChatComposer from './ChatComposer'
 import RewardWheelModal from './RewardWheelModal'
 import UnverifiedTag from './UnverifiedTag'
 import type { Player } from '../App'
@@ -8,7 +9,7 @@ import { ACCENT, ACCENT_BG } from '../App'
 import { skinColors } from '../config/appearance'
 import { goalPct } from '../game/xp'
 import LiveMap from '../live/LiveMap'
-import { useLive } from '../live/LiveProvider'
+import { useLive, useSocket } from '../live/LiveProvider'
 import { sameName, useProfile } from '../live/ProfileProvider'
 import type { RemoteBrief } from '../game/types'
 
@@ -399,10 +400,26 @@ let wheelSnoozedUntil = 0
 const WHEEL_SNOOZE_MS = 5 * 60_000
 const STAR_SPIN_MS = 1200
 
+/** Matches the server's CHAT_MS, so my own bubble goes at the same moment as everyone else's copy of it. */
+const CHAT_MS = 7_000
+
 export default function MapScreen({ me, onStartBattle }: Props) {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
+  const [myChat, setMyChat] = useState<{ text: string; at: number } | null>(null)
   const { location, connected, others } = useLive()
+  const { send } = useSocket()
   const { profile } = useProfile()
+
+  const say = (text: string) => {
+    if (send({ type: 'chat', text })) setMyChat({ text, at: Date.now() })
+  }
+
+  // The server drops everyone else's bubble on its own clock; mine is local, so time it out here.
+  useEffect(() => {
+    if (!myChat) return
+    const timer = setTimeout(() => setMyChat(null), CHAT_MS)
+    return () => clearTimeout(timer)
+  }, [myChat])
 
   // A met week owes a spin: the star spins first, then the wheel comes up (unless snoozed). Once up it stays until it
   // closes itself — the spin's own profile push clears pendingReward before the wheel has finished turning.
@@ -428,8 +445,11 @@ export default function MapScreen({ me, onStartBattle }: Props) {
         position={location.position}
         heading={location.heading}
         others={others}
+        myChat={myChat}
         onSelect={p => setSelectedPlayer(toPlayer(p, me))}
       />
+
+      <ChatComposer onSay={say}/>
 
       {/* Top HUD */}
       <div className="absolute top-0 left-0 right-0 z-30 flex flex-col items-center gap-9 px-4 pt-(--top-gap) pointer-events-none">

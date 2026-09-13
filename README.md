@@ -59,6 +59,7 @@ The Map tab is a real map (MapLibre GL + free OpenFreeMap tiles, restyled in `sr
 - **Local:** run `npm start` in the backend, then `npm run dev` here. The app connects to `ws://<page host>:8787`. Desktop browsers have no compass, so the map stays north-up.
 - **Deployed:** deploy the backend as a Render Web Service, then set `VITE_PRESENCE_URL=wss://<service>.onrender.com` on the frontend host (see `.env.example`) and redeploy, because the value is baked in at build time.
 - **One phone only?** Run `node fake-walker.mjs <lat> <lng> wss://<service>.onrender.com` in the backend folder to get a bot walking in a circle near you.
+- **Chat:** tap 💬 on the map to say something. It floats in a bubble over your avatar on everyone's map for 7 seconds — type it, or tap a quick phrase. Nothing is stored; it rides the presence socket like a position.
 - On iOS, **Share my location** asks for **Location**; the **🧭 Enable compass** pill that appears afterwards asks for **Motion & Orientation**. They're separate taps because home-screen apps drop the Location prompt if it follows the compass one. Both need https.
 
 ## Using it on an iPhone

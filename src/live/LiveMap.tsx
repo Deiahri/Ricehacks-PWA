@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // MapLibre builds its worker URL at runtime, which Vite can't see; bundle the worker explicitly instead.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import CharacterSprite from '../components/CharacterSprite'
+import ChatBubble from '../components/ChatBubble'
 import UnverifiedTag from '../components/UnverifiedTag'
 import type { Player } from '../App'
 import { skinColors } from '../config/appearance'
@@ -23,6 +24,8 @@ interface Props {
   position: GeoFix | null
   heading: number | null
   others: RemotePlayer[]
+  /** What I just said, echoed locally: the server's snapshot leaves me out. */
+  myChat: { text: string; at: number } | null
   onSelect: (p: RemotePlayer) => void
 }
 
@@ -68,7 +71,7 @@ function HeadingCone({ color, size = 120 }: { color: string; size?: number }) {
   )
 }
 
-export default function LiveMap({ me, position, heading, others, onSelect }: Props) {
+export default function LiveMap({ me, position, heading, others, myChat, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [map, setMap] = useState<MapLibre | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
@@ -159,6 +162,7 @@ export default function LiveMap({ me, position, heading, others, onSelect }: Pro
           )}
           <MapMarker map={map} lngLat={[position.lng, position.lat]} options={{ anchor: 'bottom' }}>
             <div className="flex flex-col items-center" style={{ pointerEvents: 'none' }}>
+              {myChat && <ChatBubble key={myChat.at} text={myChat.text}/>}
               {/* What others see over my head until I verify */}
               {me.verified === false && <div style={{ marginBottom: 2 }}><UnverifiedTag verified={false} size="xs"/></div>}
               <div style={{
@@ -206,6 +210,7 @@ function OtherPlayer({ map, player, me, flip, onSelect }: {
           style={{ transition: 'transform 0.15s', transformOrigin: 'bottom center' }}
           onClick={() => onSelect(player)}
         >
+          {player.chat && <ChatBubble key={player.chatAt} text={player.chat}/>}
           {player.verified === false && <div style={{ marginBottom: 2 }}><UnverifiedTag verified={false} size="xs"/></div>}
           <div
             className="font-game font-black px-2 py-0.5 rounded-full shadow text-[11px] whitespace-nowrap"
