@@ -119,7 +119,7 @@ export default function ProfileScreen({ me }: Props) {
             </button>
           </div>
 
-          {/* Name / handle / level / BP */}
+          {/* Name / level / BP */}
           <div className="flex flex-col items-center justify-center text-center gap-2 pt-2 flex-1 min-w-0" style={{ position: 'relative', zIndex: 2 }}>
             {/* Tap the name (or its pencil) to change username */}
             <button
@@ -136,9 +136,6 @@ export default function ProfileScreen({ me }: Props) {
                   style={{ width: 24, height: 24, background: color, boxShadow: `0 2px 5px ${color}66` }}>
                   <span style={{ transform: 'scale(0.8)', lineHeight: 0 }}><Pen/></span>
                 </span>
-              </span>
-              <span style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, fontSize: 14, lineHeight: '15px', color: '#7a8ba8', marginTop: -4 }}>
-                {me.username ? `@${me.username}` : 'No username yet'}
               </span>
             </button>
             <div className="flex items-center gap-2 mt-1">
