@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import svgPaths from '../imports/GameAppDesignOverview/svg-8d6d6pxw63'
+import AvatarEditor from './AvatarEditor'
 import CharacterSprite from './CharacterSprite'
 import UsernamePicker from './UsernamePicker'
 import type { Player } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
 import { COSMETICS, cosmeticUrl, type Cosmetic } from '../config/cosmetics'
 import { api, ApiError } from '../live/api'
+import { canSignOut, signOut } from '../live/credential'
 import { useProfile } from '../live/ProfileProvider'
+import { useGlobalLeaderboard } from '../live/useLeaderboard'
 
 interface Props { me: Player }
 
@@ -89,11 +92,14 @@ export default function ProfileScreen({ me }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [renaming, setRenaming] = useState(false)
+  const [editingLook, setEditingLook] = useState(false)
+  const { board } = useGlobalLeaderboard()
   const color   = ACCENT
   const wins    = me.wins
   const losses  = me.losses
   const winRate = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0
-  const rank    = 9
+  // Global rank by best set score; no sets yet = unranked.
+  const rank    = board?.me && board.me.bestScore !== null ? board.me.rank : null
 
   // The server owns prices; the config's are a fallback until it answers.
   useEffect(() => {
@@ -135,26 +141,35 @@ export default function ProfileScreen({ me }: Props) {
         {/* Rank line — compact, centered, just above the content */}
         <p className="text-center mb-4 whitespace-nowrap"
           style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 22, lineHeight: '28px', color: '#1a2b4a' }}>
-          <span style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900 }}>#{rank}</span>
-          <span style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400 }}> in Dallas</span>
+          {rank ? (
+            <>
+              <span style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900 }}>#{rank}</span>
+              <span style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400 }}> worldwide</span>
+            </>
+          ) : (
+            <span style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, color: '#7a8ba8' }}>
+              {board ? 'Unranked · finish a set to rank' : ' '}
+            </span>
+          )}
         </p>
 
         {/* Avatar + info row */}
         <div className="flex items-start gap-4 px-5">
 
           {/* Avatar box — isolation contains the scaled sprite within this stacking context */}
+          {/* Tap the avatar (or its pencil) to change skin tone and shirt colour */}
           <div className="relative flex-shrink-0 rounded-[16px] overflow-visible"
-            style={{ width: 160, height: 200, background: '#fff', border: `2.028px solid ${color}`, boxShadow: `0 6px 12px ${color}33`, isolation: 'isolate', zIndex: 1 }}>
+            onClick={() => { if (profile) setEditingLook(true) }}
+            style={{ width: 160, height: 200, background: '#fff', border: `2.028px solid ${color}`, boxShadow: `0 6px 12px ${color}33`, isolation: 'isolate', zIndex: 1, cursor: profile ? 'pointer' : 'default' }}>
             <div className="absolute inset-0 flex items-end justify-center overflow-visible">
               <div style={{ transform: 'scale(1.25)', transformOrigin: 'bottom center' }}>
                 <CharacterSprite size="lg" animate {...me.appearance} equipped={me.equipment}/>
               </div>
             </div>
-            {/* Edit button: change username */}
             <button
-              onClick={() => setRenaming(true)}
+              onClick={e => { e.stopPropagation(); setEditingLook(true) }}
               disabled={!profile}
-              aria-label="Change username"
+              aria-label="Edit avatar"
               className="absolute flex items-center justify-center rounded-full transition-transform active:scale-90"
               style={{ background: color, boxShadow: `0 2px 5px ${color}66`, width: 28, height: 28, right: -14, bottom: -14, zIndex: 10 }}>
               <Pen/>
@@ -163,12 +178,26 @@ export default function ProfileScreen({ me }: Props) {
 
           {/* Name / handle / level / BP */}
           <div className="flex flex-col items-center justify-center text-center gap-2 pt-2 flex-1 min-w-0" style={{ position: 'relative', zIndex: 2 }}>
-            <p className="whitespace-nowrap truncate max-w-full" style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 22, lineHeight: '28px', color: '#1a2b4a' }}>
-              {me.name}
-            </p>
-            <p style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, fontSize: 14, lineHeight: '15px', color: '#7a8ba8', marginTop: -4 }}>
-              {me.username ? `@${me.username}` : 'No username yet'}
-            </p>
+            {/* Tap the name (or its pencil) to change username */}
+            <button
+              onClick={() => setRenaming(true)}
+              disabled={!profile}
+              aria-label="Change username"
+              className="flex flex-col items-center gap-2 max-w-full min-w-0 transition-transform active:scale-95"
+            >
+              <span className="flex items-center gap-1.5 max-w-full min-w-0">
+                <span className="whitespace-nowrap truncate min-w-0" style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 22, lineHeight: '28px', color: '#1a2b4a' }}>
+                  {me.name}
+                </span>
+                <span className="flex items-center justify-center rounded-full flex-shrink-0"
+                  style={{ width: 24, height: 24, background: color, boxShadow: `0 2px 5px ${color}66` }}>
+                  <span style={{ transform: 'scale(0.8)', lineHeight: 0 }}><Pen/></span>
+                </span>
+              </span>
+              <span style={{ fontFamily: "'Nunito:Regular',sans-serif", fontWeight: 400, fontSize: 14, lineHeight: '15px', color: '#7a8ba8', marginTop: -4 }}>
+                {me.username ? `@${me.username}` : 'No username yet'}
+              </span>
+            </button>
             <div className="flex items-center gap-2 mt-1">
               <div className="flex items-center px-3 py-1 rounded-full" style={{ background: color }}>
                 <span style={{ fontFamily: "'Nunito:Black',sans-serif", fontWeight: 900, fontSize: 14, lineHeight: '20px', color: '#fff' }}>Lvl {me.level}</span>
@@ -230,8 +259,18 @@ export default function ProfileScreen({ me }: Props) {
         </div>
       </div>
 
+      {canSignOut() && (
+        <div className="flex justify-center pb-2">
+          <button onClick={signOut} className="font-game font-bold text-sm px-4 py-2 rounded-2xl active:scale-95"
+            style={{ color: '#7a8ba8', background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}>
+            Sign out
+          </button>
+        </div>
+      )}
+
       <div style={{ height: 80 }}/>
       {renaming && <UsernamePicker mode="rename" onClose={() => setRenaming(false)}/>}
+      {editingLook && <AvatarEditor onClose={() => setEditingLook(false)}/>}
     </div>
   )
 }

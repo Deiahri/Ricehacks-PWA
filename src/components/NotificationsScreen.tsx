@@ -1,46 +1,37 @@
-import { useState } from 'react'
-import { PersonRow } from './CalendarScreen'
-import { useProfile } from '../live/ProfileProvider'
+import { useEffect, useState } from 'react'
+import { Avatar, PersonRow } from './CalendarScreen'
+import { DEFAULT_SHIRT } from '../config/appearance'
+import { useProfile, type AppNotification } from '../live/ProfileProvider'
 
-const ACCENT = '#4a90e2'
-
-interface Notif {
-  id: number
-  type: 'battle_result' | 'level_up' | 'streak'
-  text: string
-  sub: string
-  time: string
+/** One line for a notification (also the toast when it arrives live). */
+export function notificationText(n: AppNotification): string {
+  const who = n.actor?.username ? `@${n.actor.username}` : 'Someone'
+  return n.type === 'friend_accepted' ? `🎉 ${who} accepted your friend request!` : `${who} declined your friend request`
 }
 
-const NOTIFICATIONS: Notif[] = [
-  { id: 1, type: 'battle_result', text: 'You beat Jordan K.!', sub: 'You won the battle with 9 reps vs 6', time: '2h ago' },
-  { id: 2, type: 'level_up',      text: 'Level up! You reached Lvl 9', sub: 'Keep going — Lvl 10 is close', time: '1d ago' },
-  { id: 3, type: 'streak',        text: '4-day streak!', sub: "You've trained 4 days in a row", time: '2d ago' },
-]
+const SUBTEXT: Record<AppNotification['type'], string> = {
+  friend_accepted: "You're friends now. Challenge them from Ranks → Friends.",
+  friend_declined: 'No worries, there are plenty of others to battle on the map.',
+}
 
-function NotifIcon({ type }: { type: Notif['type'] }) {
-  if (type === 'battle_result') return (
-    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#fff0f0' }}>
-      <span style={{ fontSize: 20 }}>⚔️</span>
-    </div>
-  )
-  if (type === 'level_up') return (
-    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#fffbe6' }}>
-      <span style={{ fontSize: 20 }}>⭐</span>
-    </div>
-  )
-  return (
-    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#fff8ec' }}>
-      <span style={{ fontSize: 20 }}>🔥</span>
-    </div>
-  )
+function timeAgo(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86_400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86_400)}d ago`
 }
 
 export default function NotificationsScreen() {
-  const { profile, friends, respond: answerRequest } = useProfile()
+  const { profile, friends, inbox, markRead, respond: answerRequest } = useProfile()
   const incoming = friends.incoming
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // What was unread when I opened the screen keeps its dot; everything counts as read while I'm looking.
+  const [fresh] = useState(() => new Set(inbox.items.filter(n => !n.read).map(n => n.id)))
+  useEffect(() => {
+    if (inbox.unread > 0) markRead()
+  }, [inbox.unread, markRead])
 
   const respond = async (name: string, accept: boolean) => {
     if (busy) return
@@ -86,7 +77,7 @@ export default function NotificationsScreen() {
               {incoming.map(p => (
                 <PersonRow
                   key={p.username}
-                  person={{ name: p.username, shirt: p.shirt ?? '#7fb0e0', level: p.level, equipped: p.equipped }}
+                  person={{ name: p.username, shirt: p.shirt ?? '#7fb0e0', skin: p.skin, level: p.level, equipped: p.equipped }}
                   right={
                     <div className="flex items-center gap-2 flex-shrink-0" style={{ opacity: busy === p.username ? 0.5 : 1 }}>
                       <button
@@ -117,25 +108,40 @@ export default function NotificationsScreen() {
           )}
         </div>
 
-        {/* Recent activity */}
+        {/* Recent activity: what became of requests I sent */}
         <div>
           <h3 className="font-game font-black text-base mb-2" style={{ color: '#1a2b4a' }}>Recent Activity</h3>
-          <div className="flex flex-col gap-2">
-            {NOTIFICATIONS.map(n => (
-              <div
-                key={n.id}
-                className="flex items-center gap-3 px-3 py-3 rounded-2xl"
-                style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}
-              >
-                <NotifIcon type={n.type}/>
-                <div className="flex-1 min-w-0">
-                  <p className="font-game font-bold text-sm leading-tight" style={{ color: '#1a2b4a' }}>{n.text}</p>
-                  <p className="text-[11px] font-game mt-0.5" style={{ color: '#7a8ba8' }}>{n.sub}</p>
+          {inbox.items.length === 0 ? (
+            <p className="text-xs font-game" style={{ color: '#7a8ba8' }}>
+              Nothing yet. When someone answers a friend request you sent, it shows up here.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {inbox.items.map(n => (
+                <div
+                  key={n.id}
+                  className="flex items-center gap-3 px-3 py-3 rounded-2xl"
+                  style={{
+                    background: n.type === 'friend_accepted' ? '#f3fff0' : '#f5f7fb',
+                    border: `2.5px solid ${n.type === 'friend_accepted' ? '#b7e88f' : '#c8d0e0'}`,
+                  }}
+                >
+                  <div className="relative flex-shrink-0">
+                    <Avatar shirt={n.actor?.shirt ?? DEFAULT_SHIRT} skin={n.actor?.skin} equipped={n.actor?.equipped}/>
+                    <span className="absolute -bottom-1 -right-1 text-sm leading-none">{n.type === 'friend_accepted' ? '🤝' : '✋'}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-game font-bold text-sm leading-tight" style={{ color: '#1a2b4a' }}>{notificationText(n)}</p>
+                    <p className="text-[11px] font-game mt-0.5" style={{ color: '#7a8ba8' }}>{SUBTEXT[n.type]}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span className="text-[10px] font-game" style={{ color: '#9aaac4' }}>{timeAgo(n.createdAt)}</span>
+                    {fresh.has(n.id) && <span aria-label="New" className="w-2 h-2 rounded-full" style={{ background: '#4a90e2' }}/>}
+                  </div>
                 </div>
-                <span className="text-[10px] font-game flex-shrink-0" style={{ color: '#9aaac4' }}>{n.time}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>

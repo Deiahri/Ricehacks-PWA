@@ -2,7 +2,9 @@
 
 A fitness battle game: find nearby players on the map, battle them with real-world workouts, and track progress and rankings. Squat and push-up reps are counted and form-scored entirely in the browser (the camera runs in the Battle flow's Workout Recording step). It's built for iPhone Safari and installable to the home screen. Video never leaves the phone.
 
-The game screens come from a Figma Make design. Battles, workouts, rep counting and scoring are real. The Progress, Ranks, Alerts and Profile screens still use mock data.
+The game screens come from a Figma Make design. Battles, workouts, rep counting, scoring, accounts, friends, the global leaderboard, notifications and the profile are real. The Progress screen still uses mock data.
+
+Every launch opens on the entry screen (NR logo, "Your best rep is your next rep", tap to continue), then Google sign-in, then a required username pick.
 
 ## Battles and workouts
 
@@ -14,9 +16,20 @@ The game screens come from a Figma Make design. Battles, workouts, rep counting 
 - **Workout (solo):** the Map's center **Workout** button. Pick an exercise and a time. The 10 s countdown starts as soon as the camera is up.
 - **Score** = round(Σ rep form score ÷ 10), so each rep is worth 0–10 points by form. Reps are coloured green (≥ 80), yellow (≥ 50) or red.
 - Every finished set is stored by the presence server in a Postgres `workouts` table (Tiger Cloud). See [`../Ricehacks-mybuild-backend`](../Ricehacks-mybuild-backend). A battle is stored as one row that holds both players.
-- The user is a random id kept in localStorage (`presence.userId`), plus the player name. There are no accounts.
+- Accounts come from Google sign-in (Clerk), below. Without a Clerk key the app runs in guest mode, where a random id kept in localStorage (`presence.userId`) is the account.
 
 Why this is a web app and not React Native: see [Findings.md](Findings.md).
+
+## Sign-in (Clerk + Google)
+
+1. Create an application at [clerk.com](https://clerk.com) and enable **Google** as the only sign-in option (User & authentication → SSO connections; turn off email/password). Development instances use Clerk's shared Google credentials, so nothing else is needed to try it.
+2. Frontend: set `VITE_CLERK_PUBLISHABLE_KEY=pk_…` in `.env` (see `.env.example`) and on Vercel/Render, then rebuild.
+3. Backend: set `CLERK_SECRET_KEY=sk_…` from the **same** Clerk app in its `.env` and on Render. Optionally set `CLERK_AUTHORIZED_PARTIES=https://<your app domain>`.
+4. Clerk dashboard → **Domains**: add the deployed app's domain. For a production instance you also add your own Google OAuth client ID and secret.
+
+Google sends people back to the app at `<app URL>?sso_callback=1`, which `src/components/ClerkGate.tsx` finishes. No rewrite rules are needed. Each Google account starts fresh; old guest (device) accounts aren't carried over. Test sign-in in the installed home-screen app on iPhone: iOS can open Google in a Safari sheet, and the sign-in has to land back in the app.
+
+Leave both keys unset for local dev: the entry screen still shows, sign-in is skipped, and the device id is the credential.
 
 ## Develop
 
@@ -67,6 +80,8 @@ The Map tab is a real map (MapLibre GL + free OpenFreeMap tiles, restyled in `sr
 | `src/imports/` | Figma-exported icons, sprite SVG paths and item PNGs |
 | `src/logic/` | Rep state machine + form scoring, copied verbatim from `CV-Exercise/mobile/src/logic/` |
 | `src/camera/` | Camera stream, MediaPipe loader (GPU → CPU fallback), per-frame pose hook |
-| `src/live/` | Live map: stylized MapLibre map, GPS + compass hook, WebSocket presence hook, `LiveProvider` (one socket for the whole app) |
+| `src/live/` | Live map: stylized MapLibre map, GPS + compass hook, WebSocket presence hook, `LiveProvider` (one socket for the whole app). Also `ProfileProvider` (account, friends, notifications), `credential.ts` (Clerk token or device id) and `useLeaderboard.ts` |
+| `src/components/EntryScreen.tsx`, `ClerkGate.tsx` | Launch screen and the Google sign-in gate |
+| `src/components/AvatarEditor.tsx` | Skin tone swatches and the shirt colour wheel (`src/config/appearance.ts`) |
 | `public/models/` | `pose_landmarker_full.task` / `pose_landmarker_lite.task` |
 | `vite.config.ts` | PWA manifest + service worker (app shell precached; wasm + models cached on first use) |

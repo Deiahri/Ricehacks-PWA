@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import CharacterSprite from './CharacterSprite'
 import { ACCENT, ACCENT_BG } from '../App'
+import { skinColors } from '../config/appearance'
 import { ApiError } from '../live/api'
 import { useProfile } from '../live/ProfileProvider'
 import { IDENTITY } from '../live/usePresence'
@@ -15,14 +16,12 @@ const ERRORS: Record<string, string> = {
 }
 
 /**
- * Choose a username. 'first' fills the screen and blocks the app until a name is saved;
+ * Choose a username. 'first' fills the screen and blocks the app until a name is saved (it's required);
  * 'rename' is a sheet over the profile.
  */
-export default function UsernamePicker({ mode, onClose, onSkip }: {
+export default function UsernamePicker({ mode, onClose }: {
   mode: 'first' | 'rename'
   onClose?: () => void
-  /** First launch only: play without a name while the server is out of reach. */
-  onSkip?: () => void
 }) {
   const { status, profile, claimUsername } = useProfile()
   const [name, setName] = useState(mode === 'rename' ? profile?.username ?? '' : '')
@@ -110,7 +109,7 @@ export default function UsernamePicker({ mode, onClose, onSkip }: {
     <div className="absolute inset-0 z-[80] flex flex-col" style={{ background: '#ffffff' }}>
       <div className="flex-1 overflow-y-auto px-6 flex flex-col items-center justify-center text-center" style={{ paddingTop: 'var(--top-gap)' }}>
         <div className="rounded-3xl flex items-end justify-center pb-2 mb-5" style={{ width: 140, height: 170, background: ACCENT_BG, border: `2.5px solid ${ACCENT}` }}>
-          <CharacterSprite size="md" animate shirt={IDENTITY.shirt}/>
+          <CharacterSprite size="md" animate {...skinColors(profile?.skin)} shirt={profile?.shirt ?? IDENTITY.shirt}/>
         </div>
         <h1 className="font-game font-black text-3xl" style={{ color: '#1a2b4a' }}>Pick your name</h1>
         <p className="font-game text-sm mt-1 mb-6" style={{ color: '#7a8ba8' }}>
@@ -132,11 +131,6 @@ export default function UsernamePicker({ mode, onClose, onSkip }: {
         >
           {busy ? 'Saving…' : "Let's go →"}
         </button>
-        {waking && onSkip && (
-          <button onClick={onSkip} className="font-game font-bold text-sm" style={{ color: '#7a8ba8' }}>
-            Skip for now
-          </button>
-        )}
       </div>
     </div>
   )

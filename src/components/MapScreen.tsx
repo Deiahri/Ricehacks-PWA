@@ -3,6 +3,7 @@ import ImportedFlameIcon from '../imports/FlameIcon/index'
 import CharacterSprite from './CharacterSprite'
 import type { Player } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
+import { skinColors } from '../config/appearance'
 import LiveMap from '../live/LiveMap'
 import { useLive } from '../live/LiveProvider'
 import { sameName, useProfile } from '../live/ProfileProvider'
@@ -24,7 +25,8 @@ export function toPlayer(p: RemoteBrief & { username?: string | null }, me: Play
     username: p.username ?? null,
     level: 1, power: 50, speed: 50, evasion: 50, bp: 100, wins: 0, losses: 0,
     x: 50, y: 50,
-    appearance: { ...me.appearance, shirt: p.shirt },
+    appearance: { ...me.appearance, ...skinColors(p.skin), shirt: p.shirt },
+    skinTone: p.skin ?? null,
     equipment: p.equipped ?? {},
   }
 }

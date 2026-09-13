@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import MapScreen, { toPlayer } from './components/MapScreen'
 import CalendarScreen from './components/CalendarScreen'
 import LeaderboardScreen from './components/LeaderboardScreen'
@@ -7,11 +7,15 @@ import ProfileScreen from './components/ProfileScreen'
 import BattleFlow from './components/BattleFlow'
 import InstallHint from './components/InstallHint'
 import UsernamePicker from './components/UsernamePicker'
+import EntryScreen from './components/EntryScreen'
+import { CLERK_KEY, ClerkGate } from './components/ClerkGate'
+import { notificationText } from './components/NotificationsScreen'
 import { IncomingChallengeModal, OutgoingChallengeCard, Toast } from './components/ChallengeOverlays'
+import { skinColors } from './config/appearance'
 import type { Equipped } from './config/cosmetics'
 import { useChallenge, type EndStatus } from './game/useChallenge'
 import { LiveProvider, useSocket } from './live/LiveProvider'
-import { ProfileProvider, useProfile, type Friend } from './live/ProfileProvider'
+import { ProfileProvider, useProfile, type AppNotification, type Friend } from './live/ProfileProvider'
 import { IDENTITY } from './live/usePresence'
 
 export type Tab = 'calendar' | 'leaderboard' | 'map' | 'notifications' | 'profile'
@@ -44,6 +48,8 @@ export interface Player {
   x: number
   y: number
   appearance: Appearance
+  /** Skin tone id behind appearance.skin (src/config/appearance.ts). */
+  skinTone?: string | null
   equipment: Equipment
 }
 
@@ -255,12 +261,11 @@ function Game() {
   const [toast, setToast] = useState<string | null>(null)
   const challenge = useChallenge()
   const { state: cs, respond: respondChallenge, reset: resetChallenge, cancel: cancelChallenge } = challenge
-  const { connected, send } = useSocket()
+  const { connected, send, subscribe } = useSocket()
   const account = useProfile()
-  const { profile } = account
-  // No username yet: pick one first. While the server can't be reached, a cached name is enough to play.
-  const [skipName, setSkipName] = useState(false)
-  const needsName = !skipName && (account.status === 'ready' ? !profile?.username : account.status !== 'no-db' && !account.username)
+  const { profile, friends, inbox } = account
+  // No username yet: picking one is required. While the server can't be reached, a cached name is enough to play.
+  const needsName = account.status === 'ready' ? !profile?.username : account.status !== 'no-db' && !account.username
 
   const me: Player = {
     ...ME,
@@ -270,7 +275,8 @@ function Game() {
     bp: profile?.bp ?? ME.bp,
     wins: profile?.wins ?? ME.wins,
     losses: profile?.losses ?? ME.losses,
-    appearance: { ...ME.appearance, shirt: IDENTITY.shirt },
+    appearance: { ...ME.appearance, ...skinColors(profile?.skin), shirt: profile?.shirt ?? IDENTITY.shirt },
+    skinTone: profile?.skin ?? null,
     equipment: profile?.equipped ?? {},
   }
   const opponent = cs.opponent ? toPlayer(cs.opponent, me) : null
@@ -297,6 +303,11 @@ function Game() {
     return () => clearTimeout(t)
   }, [toast])
 
+  // Someone answered a friend request I sent (it's also kept in Alerts).
+  useEffect(() => subscribe(msg => {
+    if (msg.type === 'notification' && msg.notification) setToast(notificationText(msg.notification as AppNotification))
+  }), [subscribe])
+
   // In a solo set the server refuses challenges for us; this catches one that raced the status update.
   useEffect(() => {
     if (connected) send({ type: 'status', busy: soloActive })
@@ -311,12 +322,12 @@ function Game() {
       setToast('Not connected yet. Try again in a moment.')
       return
     }
-    challenge.request({ id: player.remoteId, name: player.name, shirt: player.appearance.shirt, equipped: player.equipment })
+    challenge.request({ id: player.remoteId, name: player.name, shirt: player.appearance.shirt, skin: player.skinTone ?? null, equipped: player.equipment })
   }
 
   const challengeFriend = (f: Friend) => {
     if (!f.presenceId) return
-    startBattle(toPlayer({ id: f.presenceId, name: f.username, username: f.username, shirt: f.shirt ?? ME.appearance.shirt, equipped: f.equipped }, me))
+    startBattle(toPlayer({ id: f.presenceId, name: f.username, username: f.username, shirt: f.shirt ?? ME.appearance.shirt, skin: f.skin, equipped: f.equipped }, me))
   }
 
   const startSoloWorkout = () => {
@@ -331,7 +342,7 @@ function Game() {
     setIsSoloWorkout(false)
   }
 
-  if (needsName) return <UsernamePicker mode="first" onSkip={() => setSkipName(true)}/>
+  if (needsName) return <UsernamePicker mode="first"/>
 
   return (
     <>
@@ -354,7 +365,7 @@ function Game() {
           {tab === 'notifications' && <NotificationsScreen/>}
           {tab === 'profile'       && <ProfileScreen me={me}/>}
 
-          <BottomNav tab={tab} setTab={setTab} onWorkoutTap={startSoloWorkout} notificationCount={2}/>
+          <BottomNav tab={tab} setTab={setTab} onWorkoutTap={startSoloWorkout} notificationCount={friends.incoming.length + inbox.unread}/>
         </>
       )}
 
@@ -372,13 +383,32 @@ export default function App() {
       <div
         className="relative overflow-hidden bg-white w-screen h-dvh min-[501px]:w-[390px] min-[501px]:h-[844px] min-[501px]:rounded-[44px] min-[501px]:shadow-[0_32px_80px_rgba(0,0,0,0.22),0_0_0_2.5px_#c8d0e0]"
       >
-        {/* App-level so the socket (and any challenge) survives tab switches and the battle flow */}
-        <LiveProvider>
-          <ProfileProvider>
-            <Game/>
-          </ProfileProvider>
-        </LiveProvider>
+        <Launch/>
       </div>
     </div>
+  )
+}
+
+/**
+ * The entry screen on every launch, then Google sign-in when this build requires it (VITE_CLERK_PUBLISHABLE_KEY),
+ * then the game. The game mounts under the entry screen (once signed in), so the server is already waking up behind it.
+ */
+function Launch() {
+  const [entered, setEntered] = useState(false)
+  const enter = useCallback(() => setEntered(true), [])
+  const game = (
+    // App-level so the socket (and any challenge) survives tab switches and the battle flow
+    <LiveProvider>
+      <ProfileProvider>
+        <Game/>
+      </ProfileProvider>
+    </LiveProvider>
+  )
+  if (CLERK_KEY) return <ClerkGate entered={entered} onEnter={enter}>{game}</ClerkGate>
+  return (
+    <>
+      {game}
+      {!entered && <EntryScreen onContinue={enter}/>}
+    </>
   )
 }

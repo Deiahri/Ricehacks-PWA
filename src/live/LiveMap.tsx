@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import CharacterSprite from '../components/CharacterSprite'
 import type { Player } from '../App'
+import { skinColors } from '../config/appearance'
 import { loadStylizedStyle } from './mapStyle'
 import type { GeoFix } from './useLiveLocation'
 import type { RemotePlayer } from './usePresence'
@@ -208,7 +209,7 @@ function OtherPlayer({ map, player, me, flip, onSelect }: {
             {player.name}
           </div>
           <div style={{ lineHeight: 0 }}>
-            <CharacterSprite size="md" flip={flip} {...me.appearance} shirt={player.shirt} equipped={player.equipped} />
+            <CharacterSprite size="md" flip={flip} eye={me.appearance.eye} {...skinColors(player.skin)} shirt={player.shirt} equipped={player.equipped} />
           </div>
         </button>
       </MapMarker>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import CharacterSprite from './CharacterSprite'
 import { ACCENT, ACCENT_BG } from '../App'
+import { skinColors } from '../config/appearance'
 import type { Equipped } from '../config/cosmetics'
 import { ApiError } from '../live/api'
 import { useProfile, type Friend } from '../live/ProfileProvider'
@@ -28,29 +29,6 @@ function buildMonth(): DayData[] {
 }
 
 const MONTH_DAYS = buildMonth()
-
-// `shirt` is the avatar shirt colour — the only per-person differentiator now
-interface LeaderboardEntry {
-  rank: number
-  name: string
-  shirt: string
-  level: number
-  score: number
-  isMe?: boolean
-}
-
-const LEADERBOARD: LeaderboardEntry[] = [
-  { rank: 1,  name: 'Casey L.',  shirt: '#c3a0e6', level: 15, score: 4820 },
-  { rank: 2,  name: 'Morgan W.', shirt: '#9abae0', level: 14, score: 4310 },
-  { rank: 3,  name: 'Jordan K.', shirt: '#e98a8a', level: 12, score: 3990 },
-  { rank: 4,  name: 'Quinn B.',  shirt: '#f2b366', level: 11, score: 3540 },
-  { rank: 5,  name: 'Taylor P.', shirt: '#8fd6b0', level: 11, score: 3200 },
-  { rank: 6,  name: 'Drew T.',   shirt: '#9abae0', level: 10, score: 2980 },
-  { rank: 7,  name: 'Sam R.',    shirt: '#7fb0e0', level: 8,  score: 2550 },
-  { rank: 8,  name: 'Riley M.', shirt: '#e98a8a', level: 6,  score: 1840 },
-  { rank: 9,  name: 'Alex Chen', shirt: '#c3a0e6', level: 9,  score: 2285, isMe: true },
-  { rank: 10, name: 'Jamie S.',  shirt: '#f2c94c', level: 5,  score: 1200 },
-]
 
 function FlameIcon({ filled = true, size = 18 }: { filled?: boolean; size?: number }) {
   return (
@@ -226,7 +204,7 @@ function WorkoutProgressChart() {
 }
 
 // ─── Friends / requests ───────────────────────────────────────────
-export interface Person { name: string; shirt: string; level: number; equipped?: Equipped }
+export interface Person { name: string; shirt: string; skin?: string | null; level: number; equipped?: Equipped }
 
 // Full-screen friend profile — mirrors the stats layout on the user's own profile
 function FriendProfile({ friend, rank, onClose, onChallenge }: {
@@ -267,7 +245,7 @@ function FriendProfile({ friend, rank, onClose, onChallenge }: {
             style={{ width: 160, height: 200, background: '#fff', border: `2.028px solid ${color}`, boxShadow: `0 6px 12px ${color}33`, isolation: 'isolate', zIndex: 1 }}>
             <div className="absolute inset-0 flex items-end justify-center overflow-visible">
               <div style={{ transform: 'scale(1.25)', transformOrigin: 'bottom center' }}>
-                <CharacterSprite size="lg" animate shirt={friend.shirt ?? undefined} equipped={friend.equipped}/>
+                <CharacterSprite size="lg" animate {...skinColors(friend.skin)} shirt={friend.shirt ?? undefined} equipped={friend.equipped}/>
               </div>
             </div>
           </div>
@@ -334,13 +312,13 @@ function FriendProfile({ friend, rank, onClose, onChallenge }: {
   )
 }
 
-export function Avatar({ shirt, equipped }: { shirt: string; equipped?: Equipped }) {
+export function Avatar({ shirt, skin, equipped }: { shirt: string; skin?: string | null; equipped?: Equipped }) {
   return (
     <div
       className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
       style={{ background: ACCENT_BG, border: `2px solid ${ACCENT}` }}
     >
-      <CharacterSprite size="xs" shirt={shirt} equipped={equipped}/>
+      <CharacterSprite size="xs" {...skinColors(skin)} shirt={shirt} equipped={equipped}/>
     </div>
   )
 }
@@ -357,7 +335,7 @@ export function PersonRow({
       className="flex items-center gap-3 px-3 py-2.5 rounded-2xl"
       style={{ background: '#f5f7fb', border: '2.5px solid #c8d0e0' }}
     >
-      <Avatar shirt={person.shirt} equipped={person.equipped}/>
+      <Avatar shirt={person.shirt} skin={person.skin} equipped={person.equipped}/>
       <div className="flex-1 min-w-0">
         <span className="font-game font-bold text-sm truncate block" style={{ color: '#1a2b4a' }}>{person.name}</span>
         <div className="flex items-center gap-2">
@@ -378,7 +356,7 @@ function FriendRow({ friend, rank, onOpen }: { friend: Friend; rank: number; onO
     >
       <RankBadge rank={rank}/>
       <div className="relative flex-shrink-0">
-        <Avatar shirt={friend.shirt ?? '#7fb0e0'} equipped={friend.equipped}/>
+        <Avatar shirt={friend.shirt ?? '#7fb0e0'} skin={friend.skin} equipped={friend.equipped}/>
         <span
           aria-label={friend.online ? 'Online' : 'Offline'}
           className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full"
@@ -511,7 +489,7 @@ function FriendsSection({ onChallenge }: { onChallenge: (f: Friend) => void }) {
   )
 }
 
-function RankBadge({ rank }: { rank: number }) {
+export function RankBadge({ rank }: { rank: number }) {
   const medals: Record<number, { bg: string; text: string }> = {
     1: { bg: '#ffd700', text: '#7a5900' },
     2: { bg: '#c0c0c0', text: '#444' },
@@ -525,37 +503,6 @@ function RankBadge({ rank }: { rank: number }) {
   )
   return (
     <div className="w-7 h-7 flex items-center justify-center font-game font-bold text-xs" style={{ color: '#7a8ba8' }}>{rank}</div>
-  )
-}
-
-function LocalRow({ entry }: { entry: LeaderboardEntry & { rank: number } }) {
-  const color = ACCENT
-  return (
-    <div
-      className="flex items-center gap-3 px-3 py-2.5 rounded-2xl"
-      style={{
-        background: entry.isMe ? '#eff5ff' : '#f5f7fb',
-        border: `2.5px solid ${entry.isMe ? '#4a90e2' : '#c8d0e0'}`,
-      }}
-    >
-      <RankBadge rank={entry.rank}/>
-      <Avatar shirt={entry.shirt}/>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="font-game font-bold text-sm truncate" style={{ color: '#1a2b4a' }}>{entry.name}</span>
-          {entry.isMe && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-game font-bold text-white" style={{ background: '#4a90e2' }}>YOU</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-game font-bold" style={{ color }}>Lvl {entry.level}</span>
-        </div>
-      </div>
-      <div className="text-right">
-        <div className="font-game font-black text-sm" style={{ color: '#f59e0b' }}>{entry.score.toLocaleString()}</div>
-        <div className="text-[9px] font-game" style={{ color: '#7a8ba8' }}>BP</div>
-      </div>
-    </div>
   )
 }
 
@@ -599,35 +546,6 @@ function SeeMoreButton({ label, onClick }: { label: string; onClick: () => void 
   )
 }
 
-function LocalLeaderboard({
-  sorted,
-  me,
-}: {
-  sorted: (LeaderboardEntry & { rank: number })[]
-  me?: LeaderboardEntry & { rank: number }
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="font-game font-black text-xl leading-tight" style={{ color: '#1a2b4a' }}>Dallas Leaderboard</h2>
-          <p className="text-xs font-game" style={{ color: '#7a8ba8' }}>Top athletes near you</p>
-        </div>
-        {me && (
-          <div className="text-right">
-            <div className="font-game font-black text-base" style={{ color: '#f59e0b' }}>#{me.rank}</div>
-            <div className="text-[10px] font-game" style={{ color: '#7a8ba8' }}>Your rank</div>
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        {sorted.map(entry => <LocalRow key={entry.name} entry={entry}/>)}
-      </div>
-    </div>
-  )
-}
-
 export default function CalendarScreen() {
   return (
     <div className="absolute inset-0 flex flex-col" style={{ background: '#ffffff' }}>
@@ -641,4 +559,4 @@ export default function CalendarScreen() {
   )
 }
 
-export { LocalLeaderboard, FriendsSection, LEADERBOARD }
+export { FriendsSection }

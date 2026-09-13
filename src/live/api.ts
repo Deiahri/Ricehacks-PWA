@@ -1,3 +1,4 @@
+import { credentialRejected, sessionToken } from './credential'
 import { IDENTITY, PRESENCE_URL } from './usePresence'
 
 /** The presence server's HTTP side (same host as the WebSocket unless VITE_API_URL says otherwise). */
@@ -10,14 +11,15 @@ export class ApiError extends Error {
   }
 }
 
-/** JSON call as this device (the device id is the credential until real sign-in exists). */
+/** JSON call as the signed-in user (a Clerk session token), or as this device in guest mode. */
 export async function api<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  const credential = (await sessionToken()) ?? IDENTITY.userId
   let res: Response
   try {
     res = await fetch(`${API_BASE}${path}`, {
       method,
       headers: {
-        authorization: `Bearer ${IDENTITY.userId}`,
+        authorization: `Bearer ${credential}`,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -26,6 +28,8 @@ export async function api<T>(method: 'GET' | 'POST', path: string, body?: unknow
     throw new ApiError(0, 'offline')
   }
   const data = await res.json().catch(() => null)
-  if (!res.ok) throw new ApiError(res.status, (data as { error?: string } | null)?.error ?? 'server')
+  const code = (data as { error?: string } | null)?.error ?? 'server'
+  if (res.status === 401 && code === 'bad-token') credentialRejected()
+  if (!res.ok) throw new ApiError(res.status, code)
   return data as T
 }

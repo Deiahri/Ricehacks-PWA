@@ -11,7 +11,7 @@ import { ComboTracker, type ComboEvent } from '../game/combo';
 import { DURATIONS } from '../game/types';
 import { COSMETICS, wornItems } from '../config/cosmetics';
 import { COACH } from '../config/coach';
-import { freshMemory, nextCoachEvent, projectedReps, type SetSnapshot } from '../coach/triggers';
+import { freshMemory, nextCoachEvent, projectedReps, setDoneMessage, statsMessage, verdict, type SetSnapshot } from '../coach/triggers';
 
 const FPS = 30;
 const rad = (deg: number) => (deg * Math.PI) / 180;
@@ -162,6 +162,12 @@ const coachChecks = (): [string, boolean][] => {
     ['coach: ahead of the record → on_pace', pace(10, 12)?.type === 'on_pace'],
     ['coach: behind the record, no record, too early, or talking → quiet',
       pace(20, 12) === null && pace(null, 12) === null && pace(10, 5) === null && pace(10, 12, true) === null],
+    ['coach: verdicts follow the rep colors', verdict(85) === 'good' && verdict(60) === 'sloppy' && verdict(30) === 'bad'],
+    ['coach: stats carry the set verdict', statsMessage(snap([40, 40, 40], 10, 30, null), 12).includes('set_verdict=bad')],
+    ['coach: a bad set is recapped as bad, with the shortfall and cue',
+      /verdict=bad\. 3 reps.*short by 12.*Go deeper/.test(setDoneMessage(snap([40, 45, 30], 30, 30, 15))) && bad?.type === 'bad_form' && bad.form === 51],
+    ['coach: a clean set with no record → good, no personal best',
+      /verdict=good/.test(setDoneMessage(snap([90, 90], 30, 30, null))) && !setDoneMessage(snap([90, 90], 30, 30, null)).includes('personal best')],
   ];
 };
 

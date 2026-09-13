@@ -4,7 +4,9 @@ import { formatDuration } from '../game/scoring'
 import { EXERCISE_OPTIONS, type SessionConfig } from '../game/types'
 import { api, ApiError } from '../live/api'
 import { storage } from '../platform'
-import { eventMessage, freshMemory, nextCoachEvent, statsMessage, type CoachRep, type SetSnapshot } from './triggers'
+import {
+  eventMessage, freshMemory, nextCoachEvent, setDoneMessage, statsMessage, targetsMessage, type CoachRep, type ScoreTargets, type SetSnapshot,
+} from './triggers'
 import type { VoiceHandle } from './voice'
 
 const CoachHost = lazy(() => import('./CoachHost'))
@@ -80,13 +82,18 @@ export function useCoach({ username, isSolo }: { username: string; isSolo: boole
     if (!muted) begin()
   }, [enabled, isSolo, username, muted, begin])
 
-  /** The set is decided: look up the personal record, and tell the coach (battles decide by vote). */
+  /** The set is decided: tell the coach, and look up the scores to beat (battles decide by vote). */
   const prime = useCallback((c: SessionConfig, opponent?: string) => {
     record.current = null
-    api<{ bestReps: number | null }>('GET', `/api/pr?exercise=${c.exercise}&durationS=${c.durationS}`)
-      .then(r => { record.current = r.bestReps }, () => {})
     intro.current = `[STATS] set confirmed: ${label(c)} for ${c.durationS}s${opponent ? `, battle vs ${opponent}` : ''}.`
     voiceRef.current?.context(intro.current)
+    const query = `exercise=${c.exercise}&durationS=${c.durationS}${opponent ? `&opponent=${encodeURIComponent(opponent)}` : ''}`
+    api<ScoreTargets>('GET', `/api/targets?${query}`).then(t => {
+      record.current = t.personal?.reps ?? null
+      const line = targetsMessage(t, opponent)
+      intro.current = `${intro.current} ${line}` // sent on connect if the coach isn't talking yet
+      voiceRef.current?.context(line)
+    }, () => {})
   }, [])
 
   const status = voice?.status
@@ -113,7 +120,7 @@ export function useCoach({ username, isSolo }: { username: string; isSolo: boole
     const v = voiceRef.current
     if (!v || v.status !== 'connected') return v?.end()
     v.context(statsMessage(snapshot(reps, durationS * 1000, durationS), score) + extra)
-    if (COACH.endOfSetSummary) v.say('[APP EVENT] set_done: the set just ended.')
+    if (COACH.endOfSetSummary) v.say(setDoneMessage(snapshot(reps, durationS * 1000, durationS)))
     clearTimeout(hangUp.current)
     hangUp.current = setTimeout(() => voiceRef.current?.end(), COACH.hangUpAfterS * 1000)
   }, [])

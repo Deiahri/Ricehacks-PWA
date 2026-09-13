@@ -23,6 +23,8 @@ export interface RemoteBrief {
   id: string
   name: string
   shirt: string
+  /** Skin tone id (src/config/appearance.ts). */
+  skin?: string | null
   equipped?: Equipped
 }
 

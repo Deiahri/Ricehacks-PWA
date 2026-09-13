@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Equipped } from '../config/cosmetics'
 import { storage } from '../platform'
+import { sessionToken } from './credential'
 import { angleDiff, type GeoFix } from './useLiveLocation'
 
 export interface RemotePlayer {
@@ -9,6 +10,8 @@ export interface RemotePlayer {
   /** Set once the player has picked a username (their account on the server). */
   username?: string | null
   shirt: string
+  /** Skin tone id (src/config/appearance.ts); null until they pick one. */
+  skin?: string | null
   equipped?: Equipped
   lat: number
   lng: number
@@ -104,9 +107,13 @@ export function usePresence(position: GeoFix | null, heading: number | null) {
       wsRef.current = ws
       ws.onopen = () => {
         retries = 0
-        setConnected(true)
-        ws.send(JSON.stringify({ type: 'hello', ...IDENTITY }))
-        flush()
+        // Signed in: a fresh session token on every (re)connect tells the server which account this is.
+        void sessionToken().then(token => {
+          if (ws.readyState !== WebSocket.OPEN) return
+          ws.send(JSON.stringify({ type: 'hello', ...IDENTITY, ...(token ? { token } : {}) }))
+          setConnected(true)
+          flush()
+        })
       }
       ws.onmessage = (e) => {
         let msg: { type?: unknown; players?: RemotePlayer[] }
