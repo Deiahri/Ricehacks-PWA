@@ -1,8 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Model } from '../camera/landmarker'
 import type { Facing } from '../camera/stream'
 import type { Landmark, PoseEventPayload } from '../camera/types'
-import { usePoseCamera } from '../camera/usePoseCamera'
+import { usePoseCamera, type CameraPhase } from '../camera/usePoseCamera'
 import { SKELETON, VIS_THRESHOLD } from '../logic/pose'
 import { cameraErrorMessage, useElementSize, useWakeLock } from '../platform'
 
@@ -15,9 +15,15 @@ type Frame = {
 
 const MODEL: Model = 'full'
 
+interface Props {
+  /** Every pose frame (the rep engine hooks in here). */
+  onPose?: (p: PoseEventPayload) => void
+  /** Camera/model startup progress; 'running' = frames are flowing. */
+  onPhase?: (phase: CameraPhase) => void
+}
+
 // Live camera + pose skeleton for the Workout Recording step. Fills its (relative) parent.
-// Rep counting / scoring isn't wired into the game UI yet — the Figma counters are still mocked.
-export default function CameraFeed() {
+export default function CameraFeed({ onPose: onPoseProp, onPhase }: Props) {
   useWakeLock()
   const videoRef = useRef<HTMLVideoElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
@@ -25,9 +31,11 @@ export default function CameraFeed() {
   const [facing, setFacing] = useState<Facing>('front')
   const [frame, setFrame] = useState<Frame | null>(null)
   const [error, setError] = useState('')
+  const onPoseRef = useRef(onPoseProp)
+  onPoseRef.current = onPoseProp
 
   const onPose = useCallback((p: PoseEventPayload) => {
-    // TODO: feed EXERCISES[exercise]().update(poseFromLandmarks(...), p.timestampMs / 1000) here to drive reps/BP.
+    onPoseRef.current?.(p)
     setFrame({ landmarks: p.landmarks, imageWidth: p.imageWidth, imageHeight: p.imageHeight, mirrored: p.mirrored })
   }, [])
 
@@ -37,6 +45,7 @@ export default function CameraFeed() {
   }, [])
 
   const phase = usePoseCamera(videoRef, { model: MODEL, facing, onPose, onError })
+  useEffect(() => onPhase?.(phase), [phase, onPhase])
   const loading = phase === 'camera' ? 'Starting camera…' : phase === 'model' ? 'Loading pose model…' : ''
 
   return (

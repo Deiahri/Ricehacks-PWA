@@ -1,14 +1,18 @@
-import React, { useState } from 'react'
-import MapScreen from './components/MapScreen'
+import React, { useEffect, useState } from 'react'
+import MapScreen, { toPlayer } from './components/MapScreen'
 import CalendarScreen from './components/CalendarScreen'
 import LeaderboardScreen from './components/LeaderboardScreen'
 import NotificationsScreen from './components/NotificationsScreen'
 import ProfileScreen from './components/ProfileScreen'
 import BattleFlow from './components/BattleFlow'
 import InstallHint from './components/InstallHint'
+import { IncomingChallengeModal, OutgoingChallengeCard, Toast } from './components/ChallengeOverlays'
+import { useChallenge, type EndStatus } from './game/useChallenge'
+import { LiveProvider, useSocket } from './live/LiveProvider'
+import { IDENTITY } from './live/usePresence'
 
 export type Tab = 'calendar' | 'leaderboard' | 'map' | 'notifications' | 'profile'
-export type BattleStep = 'pre-anim' | 'goals' | 'recording' | 'result'
+export type BattleStep = 'pre-anim' | 'pick' | 'recording' | 'result'
 
 export interface Appearance {
   skin: string
@@ -40,6 +44,8 @@ function randomEquipment(): Equipment {
 
 export interface Player {
   id: number
+  /** Presence connection id, for live players on the map (the challenge target). */
+  remoteId?: string
   name: string
   level: number
   power: number
@@ -250,57 +256,125 @@ function BottomNav({
   )
 }
 
-export default function App() {
+function endMessage(status: EndStatus | null, name: string): string {
+  switch (status) {
+    case 'declined':     return `${name} declined your battle request`
+    case 'cancelled':    return `${name} cancelled the battle`
+    case 'timeout':      return 'The battle request timed out'
+    case 'busy':         return `${name} is busy right now`
+    case 'offline':      return `${name} is no longer online`
+    case 'left':         return `${name} left the battle`
+    case 'disconnected': return 'Connection lost. The battle ended.'
+    default:             return 'The battle ended'
+  }
+}
+
+function Game() {
   const [tab, setTab] = useState<Tab>('map')
   const [battleStep, setBattleStep] = useState<BattleStep | null>(null)
-  const [opponent, setOpponent] = useState<Player | null>(null)
   const [isSoloWorkout, setIsSoloWorkout] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const challenge = useChallenge()
+  const { state: cs, respond: respondChallenge, reset: resetChallenge, cancel: cancelChallenge } = challenge
+  const { connected, send } = useSocket()
+
+  const me: Player = { ...ME, name: IDENTITY.name, appearance: { ...ME.appearance, shirt: IDENTITY.shirt } }
+  const opponent = cs.opponent ? toPlayer(cs.opponent, ME) : null
+  const soloActive = battleStep !== null && isSoloWorkout
+
+  // Accepted, on either phone: into the battle flow.
+  useEffect(() => {
+    if (cs.phase !== 'picking') return
+    setIsSoloWorkout(false)
+    setBattleStep(step => step ?? 'pre-anim')
+  }, [cs.phase])
+
+  // Declined / timed out / opponent left before the set: back out and say why.
+  useEffect(() => {
+    if (cs.phase !== 'ended') return
+    setToast(endMessage(cs.ended, cs.opponent?.name ?? 'Your opponent'))
+    if (!isSoloWorkout) setBattleStep(null)
+    resetChallenge()
+  }, [cs.phase, cs.ended, cs.opponent, isSoloWorkout, resetChallenge])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3500)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // In a solo set the server refuses challenges for us; this catches one that raced the status update.
+  useEffect(() => {
+    if (connected) send({ type: 'status', busy: soloActive })
+  }, [connected, soloActive, send])
+  useEffect(() => {
+    if (soloActive && cs.phase === 'incoming') respondChallenge(false)
+  }, [soloActive, cs.phase, respondChallenge])
 
   const startBattle = (player: Player) => {
-    setOpponent(player)
-    setIsSoloWorkout(false)
-    setBattleStep('pre-anim')
+    if (!player.remoteId) return
+    if (!connected) {
+      setToast('Not connected yet. Try again in a moment.')
+      return
+    }
+    challenge.request({ id: player.remoteId, name: player.name, shirt: player.appearance.shirt })
   }
 
   const startSoloWorkout = () => {
+    if (cs.phase === 'outgoing') cancelChallenge()
     setIsSoloWorkout(true)
-    setOpponent(null)
-    setBattleStep('recording')
+    setBattleStep('pick')
   }
 
   const exitBattle = () => {
+    if (!isSoloWorkout) cancelChallenge() // forfeits if the set is live; a no-op once there's a result
     setBattleStep(null)
-    setOpponent(null)
     setIsSoloWorkout(false)
   }
 
+  return (
+    <>
+      {battleStep ? (
+        <BattleFlow
+          step={battleStep}
+          setStep={setBattleStep}
+          opponent={opponent}
+          me={me}
+          isSolo={isSoloWorkout}
+          challenge={challenge}
+          onExit={exitBattle}
+        />
+      ) : (
+        <>
+          {tab === 'map'           && <MapScreen me={ME} onStartBattle={startBattle}/>}
+          {tab === 'map'           && <InstallHint/>}
+          {tab === 'calendar'      && <CalendarScreen/>}
+          {tab === 'leaderboard'   && <LeaderboardScreen/>}
+          {tab === 'notifications' && <NotificationsScreen/>}
+          {tab === 'profile'       && <ProfileScreen me={ME}/>}
+
+          <BottomNav tab={tab} setTab={setTab} onWorkoutTap={startSoloWorkout} notificationCount={2}/>
+        </>
+      )}
+
+      {cs.phase === 'outgoing' && !battleStep && opponent && <OutgoingChallengeCard to={opponent} onCancel={cancelChallenge}/>}
+      {cs.phase === 'incoming' && !soloActive && opponent && <IncomingChallengeModal from={opponent} onAnswer={respondChallenge}/>}
+      {toast && <Toast text={toast}/>}
+    </>
+  )
+}
+
+export default function App() {
   return (
     <div className="flex items-center justify-center min-h-dvh" style={{ background: '#e8edf5' }}>
       {/* Phone shell: fills the screen on phones, framed 390×844 "phone" on wider screens */}
       <div
         className="relative overflow-hidden bg-white w-screen h-dvh min-[501px]:w-[390px] min-[501px]:h-[844px] min-[501px]:rounded-[44px] min-[501px]:shadow-[0_32px_80px_rgba(0,0,0,0.22),0_0_0_2.5px_#c8d0e0]"
       >
-        {battleStep ? (
-          <BattleFlow
-            step={battleStep}
-            setStep={setBattleStep}
-            opponent={opponent}
-            me={ME}
-            isSolo={isSoloWorkout}
-            onExit={exitBattle}
-          />
-        ) : (
-          <>
-            {tab === 'map'           && <MapScreen me={ME} onStartBattle={startBattle}/>}
-            {tab === 'map'           && <InstallHint/>}
-            {tab === 'calendar'      && <CalendarScreen/>}
-            {tab === 'leaderboard'   && <LeaderboardScreen/>}
-            {tab === 'notifications' && <NotificationsScreen/>}
-            {tab === 'profile'       && <ProfileScreen me={ME}/>}
-
-            <BottomNav tab={tab} setTab={setTab} onWorkoutTap={startSoloWorkout} notificationCount={2}/>
-          </>
-        )}
+        {/* App-level so the socket (and any challenge) survives tab switches and the battle flow */}
+        <LiveProvider>
+          <Game/>
+        </LiveProvider>
       </div>
     </div>
   )

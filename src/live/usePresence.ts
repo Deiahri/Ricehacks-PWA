@@ -11,15 +11,24 @@ export interface RemotePlayer {
   heading: number | null
   acc: number | null
   ts: number
+  /** In a challenge or a solo workout. */
+  busy?: boolean
 }
+
+/** Any non-snapshot message from the presence server (challenge traffic, save acks). */
+export type ServerMessage = { type: string; [key: string]: unknown }
+type Listener = (msg: ServerMessage) => void
 
 export const PRESENCE_URL = import.meta.env.VITE_PRESENCE_URL || `ws://${location.hostname}:8787`
 
 const SHIRTS = ['#e98a8a', '#7fb0e0', '#b98be0', '#f0a040', '#6fd0a8', '#e0c050', '#e07fb8']
 const SEND_EVERY_MS = 250 // at most 4 position updates/s
-const KEEPALIVE_MS = 20_000 // re-send while standing still; the server drops players silent for 60 s
+const KEEPALIVE_MS = 20_000 // re-send while standing still; the server hides players silent for 60 s
 
-// Name + shirt stick across launches; the id is per tab so two tabs show up as two players.
+const randomId = () => crypto.randomUUID?.() ?? `p-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
+
+// Name, shirt and userId (who stored workouts belong to) stick across launches;
+// the connection id is per tab so two tabs show up as two players.
 function makeIdentity() {
   let name = storage.get('presence.name')
   if (!name) {
@@ -31,8 +40,12 @@ function makeIdentity() {
     shirt = SHIRTS[Math.floor(Math.random() * SHIRTS.length)]
     storage.set('presence.shirt', shirt)
   }
-  const id = crypto.randomUUID?.() ?? `p-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
-  return { id, name, shirt }
+  let userId = storage.get('presence.userId')
+  if (!userId || userId.length < 4 || userId.length > 64) {
+    userId = randomId()
+    storage.set('presence.userId', userId)
+  }
+  return { id: randomId(), userId, name, shirt }
 }
 export const IDENTITY = makeIdentity()
 
@@ -43,11 +56,12 @@ function metres(a: { lat: number; lng: number }, b: { lat: number; lng: number }
   return Math.hypot(x, y) * 6_371_000
 }
 
-/** Streams my position to the presence server and returns everyone else's. */
+/** Streams my position to the presence server and returns everyone else's, plus a channel for other messages. */
 export function usePresence(position: GeoFix | null, heading: number | null) {
   const [connected, setConnected] = useState(false)
   const [others, setOthers] = useState<RemotePlayer[]>([])
   const wsRef = useRef<WebSocket | null>(null)
+  const listeners = useRef(new Set<Listener>())
   const latest = useRef({ position, heading })
   const lastSent = useRef<{ lat: number; lng: number; heading: number | null; t: number } | null>(null)
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -58,6 +72,21 @@ export function usePresence(position: GeoFix | null, heading: number | null) {
     if (!ws || ws.readyState !== WebSocket.OPEN || !p) return
     ws.send(JSON.stringify({ type: 'pos', lat: p.lat, lng: p.lng, heading: h, acc: p.acc }))
     lastSent.current = { lat: p.lat, lng: p.lng, heading: h, t: Date.now() }
+  }, [])
+
+  /** Send a message now; false when the socket isn't open. */
+  const send = useCallback((msg: object) => {
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false
+    ws.send(JSON.stringify(msg))
+    return true
+  }, [])
+
+  const subscribe = useCallback((listener: Listener) => {
+    listeners.current.add(listener)
+    return () => {
+      listeners.current.delete(listener)
+    }
   }, [])
 
   // Connection lifetime: connect, say hello, reconnect with backoff.
@@ -76,7 +105,7 @@ export function usePresence(position: GeoFix | null, heading: number | null) {
         flush()
       }
       ws.onmessage = (e) => {
-        let msg: { type?: string; players?: RemotePlayer[] }
+        let msg: { type?: unknown; players?: RemotePlayer[] }
         try {
           msg = JSON.parse(String(e.data))
         } catch {
@@ -84,6 +113,8 @@ export function usePresence(position: GeoFix | null, heading: number | null) {
         }
         if (msg.type === 'players' && Array.isArray(msg.players)) {
           setOthers(msg.players.filter((p) => p.id !== IDENTITY.id))
+        } else if (typeof msg.type === 'string') {
+          for (const listener of listeners.current) listener(msg as ServerMessage)
         }
       }
       ws.onclose = () => {
@@ -129,5 +160,5 @@ export function usePresence(position: GeoFix | null, heading: number | null) {
       }, wait)
   }, [position, heading, flush])
 
-  return { connected, others }
+  return { connected, others, send, subscribe }
 }

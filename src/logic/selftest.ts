@@ -6,6 +6,7 @@
  */
 import { EXERCISES, Exercise, ExerciseName } from './exercises';
 import { Pose, SIDES, Vec } from './pose';
+import { avgForm, formatClock, repQuality, totalScore } from '../game/scoring';
 
 const FPS = 30;
 const rad = (deg: number) => (deg * Math.PI) / 180;
@@ -113,6 +114,14 @@ const SCENARIOS: Scenario[] = [
   },
 ];
 
+// Session scoring on top of the per-rep scores (src/game/scoring.ts; the server mirrors totalScore).
+const UNIT_CHECKS: [string, boolean][] = [
+  ['totalScore: sum/10, rounded', totalScore([80, 95, 40]) === 22 && totalScore([]) === 0],
+  ['repQuality thresholds', repQuality(80) === 'green' && repQuality(79.9) === 'yellow' && repQuality(50) === 'yellow' && repQuality(49.9) === 'red'],
+  ['avgForm', avgForm([80, 90]) === 85 && avgForm([]) === 0],
+  ['formatClock', formatClock(125) === '2:05' && formatClock(0.2) === '0:01' && formatClock(-3) === '0:00'],
+];
+
 function run(s: Scenario): Exercise {
   const ex = EXERCISES[s.exercise]();
   s.frames.forEach((pose, i) => ex.update(pose, i / FPS));
@@ -143,6 +152,11 @@ if (proc?.argv.includes('--dump')) {
       + (ex.reps.length ? ` cues="${cues(ex)}"` : '') + (ex.status ? ` status="${ex.status}"` : '');
     console.log(`${err ? 'FAIL' : 'PASS'}  ${s.name.padEnd(26)} ${summary}${err ? `  <- ${err}` : ''}`);
   }
-  console.log(`\n${SCENARIOS.length - failed}/${SCENARIOS.length} passed`);
+  for (const [name, ok] of UNIT_CHECKS) {
+    failed += ok ? 0 : 1;
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
+  }
+  const total = SCENARIOS.length + UNIT_CHECKS.length;
+  console.log(`\n${total - failed}/${total} passed`);
   if (proc && failed) proc.exitCode = 1;
 }

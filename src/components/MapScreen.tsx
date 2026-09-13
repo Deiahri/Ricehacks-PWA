@@ -4,8 +4,9 @@ import CharacterSprite from './CharacterSprite'
 import type { Player } from '../App'
 import { ACCENT, ACCENT_BG } from '../App'
 import LiveMap from '../live/LiveMap'
-import { useLiveLocation } from '../live/useLiveLocation'
-import { IDENTITY, usePresence, type RemotePlayer } from '../live/usePresence'
+import { useLive } from '../live/LiveProvider'
+import { IDENTITY } from '../live/usePresence'
+import type { RemoteBrief } from '../game/types'
 
 interface Props {
   me: Player
@@ -13,11 +14,12 @@ interface Props {
 }
 
 // Live players only have a name/shirt/position; give them placeholder stats so the popover + battle flow work.
-function toPlayer(p: RemotePlayer, me: Player): Player {
+export function toPlayer(p: RemoteBrief, me: Player): Player {
   let h = 0
   for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) | 0
   return {
     id: 1000 + (Math.abs(h) % 1_000_000),
+    remoteId: p.id,
     name: p.name,
     level: 1, power: 50, speed: 50, evasion: 50, bp: 100, wins: 0, losses: 0,
     x: 50, y: 50,
@@ -324,8 +326,7 @@ function ProfileChip({ me }: { me: Player }) {
 
 export default function MapScreen({ me, onStartBattle }: Props) {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
-  const location = useLiveLocation()
-  const { connected, others } = usePresence(location.position, location.heading)
+  const { location, connected, others } = useLive()
   const meLive: Player = { ...me, name: IDENTITY.name, appearance: { ...me.appearance, shirt: IDENTITY.shirt } }
 
   const statusText =
@@ -347,18 +348,30 @@ export default function MapScreen({ me, onStartBattle }: Props) {
       {/* Top HUD */}
       <div className="absolute top-0 left-0 right-0 z-30 flex flex-col items-center gap-9 px-4 pt-12 pointer-events-none">
         <div className="pointer-events-auto"><StreakStrip me={me}/></div>
-        <div
-          data-testid="live-status"
-          className="flex items-center gap-1.5 rounded-full px-3 py-1 font-game font-bold text-[11px]"
-          style={{ background: 'rgba(255,255,255,0.92)', border: '2px solid #c8d0e0', color: '#1a2b4a' }}
-        >
-          <span style={{ color: statusColor }}>●</span>
-          {statusText}
-          <span style={{ color: '#7a8ba8' }}>· {IDENTITY.name}{location.heading !== null ? ` · ${location.heading}°` : ''}</span>
+        <div className="flex items-center gap-2">
+          <div
+            data-testid="live-status"
+            className="flex items-center gap-1.5 rounded-full px-3 py-1 font-game font-bold text-[11px]"
+            style={{ background: 'rgba(255,255,255,0.92)', border: '2px solid #c8d0e0', color: '#1a2b4a' }}
+          >
+            <span style={{ color: statusColor }}>●</span>
+            {statusText}
+            <span style={{ color: '#7a8ba8' }}>· {IDENTITY.name}{location.heading !== null ? ` · ${location.heading}°` : ''}</span>
+          </div>
+          {/* iOS compass permission gets its own tap, after Location is granted */}
+          {location.status === 'active' && location.compass === 'prompt' && (
+            <button
+              onClick={() => void location.enableCompass()}
+              className="pointer-events-auto rounded-full px-3 py-1 font-game font-black text-[11px] text-white transition-transform active:scale-95"
+              style={{ background: ACCENT, border: '2px solid rgba(255,255,255,0.7)', boxShadow: `0 4px 12px ${ACCENT}44` }}
+            >
+              🧭 Enable compass
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Share-location prompt: the tap is required for iOS compass permission */}
+      {/* Share-location prompt: the tap is required for the iOS Location prompt */}
       {location.status !== 'active' && (
         <div className="absolute inset-x-6 z-30 flex flex-col items-center gap-3 rounded-3xl p-5 text-center anim-fade-up"
           style={{ top: '42%', background: '#ffffff', border: '2.5px solid #c8d0e0', boxShadow: '0 20px 60px rgba(0,0,0,0.16)' }}>
